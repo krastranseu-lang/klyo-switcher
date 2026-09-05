@@ -6,6 +6,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !terminateIfDuplicate() else { return }
+        guard !przeniesSieDoProgramow() else { return }
 
         buildStatusItem()
         switcher.start()
@@ -23,6 +24,67 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Permissions.requestAccessibility()
             showAccessibilityIntro()
         }
+    }
+
+    /// Program pobrany z internetu laduje w katalogu Pobrane. Zostawiony tam dziala,
+    /// ale znika przy sprzataniu katalogu, nie widzi go Launchpad, a autostart po
+    /// zalogowaniu wskazuje na sciezke, ktorej moze juz nie byc. Dlatego przenosimy
+    /// sie sami do katalogu Programy - uzytkownik ma o jeden krok mniej.
+    ///
+    /// Robimy to WYLACZNIE z Pobranych i z biurka, czyli z miejsc, gdzie plik ladue
+    /// po pobraniu. Program uruchomiony swiadomie z innego katalogu zostawiamy w spokoju.
+    /// Zwraca `true`, gdy kopia zostala uruchomiona i ta kopia ma zakonczyc prace.
+    private func przeniesSieDoProgramow() -> Bool {
+        let mojaSciezka = Bundle.main.bundlePath
+        let dom = NSHomeDirectory()
+        let zPobranych = mojaSciezka.hasPrefix("\(dom)/Downloads/")
+        let zBiurka = mojaSciezka.hasPrefix("\(dom)/Desktop/")
+        guard zPobranych || zBiurka else { return false }
+
+        let nazwa = (mojaSciezka as NSString).lastPathComponent
+        let menedzer = FileManager.default
+        // Najpierw katalog systemowy; gdy nie ma do niego prawa zapisu (konto bez
+        // uprawnien administratora), wlasny katalog uzytkownika dziala tak samo dobrze.
+        var katalog = "/Applications"
+        if !menedzer.isWritableFile(atPath: katalog) {
+            katalog = "\(dom)/Applications"
+            try? menedzer.createDirectory(atPath: katalog, withIntermediateDirectories: true)
+        }
+        let cel = "\(katalog)/\(nazwa)"
+        guard cel != mojaSciezka else { return false }
+
+        if menedzer.fileExists(atPath: cel) {
+            // W Programach stoi juz starsza kopia - podmieniamy ja na te, ktora
+            // wlasnie uruchomil uzytkownik.
+            try? menedzer.removeItem(atPath: cel)
+        }
+        do {
+            try menedzer.copyItem(atPath: mojaSciezka, toPath: cel)
+        } catch {
+            return false
+        }
+
+        // Znacznik pochodzenia z internetu zdjety z KOPII: uzytkownik wlasnie
+        // potwierdzil uruchomienie, wiec system nie musi pytac drugi raz.
+        let czyszczenie = Process()
+        czyszczenie.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        czyszczenie.arguments = ["-dr", "com.apple.quarantine", cel]
+        try? czyszczenie.run()
+        czyszczenie.waitUntilExit()
+
+        let konfiguracja = NSWorkspace.OpenConfiguration()
+        konfiguracja.activates = true
+        konfiguracja.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: cel), configuration: konfiguracja) { _, _ in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
+        // Gdyby system nie odpowiedzial, nie zostawiamy dwoch kopii w pamieci.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            NSApp.terminate(nil)
+        }
+        return true
     }
 
     /// Autostart potrafi wystartowac druga kopie obok juz dzialajacej - wtedy nowa konczy prace.
