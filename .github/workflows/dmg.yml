@@ -1,0 +1,53 @@
+name: Zrób obraz DMG
+
+# Obraz DMG da się zbudować tylko na macOS (potrzebne jest systemowe `hdiutil`),
+# a podpisujemy u siebie, bo klucz nie opuszcza naszego serwera. Dlatego ten
+# przebieg POBIERA gotową, już podpisaną aplikację z klyo.pl i pakuje ją w obraz.
+# Nie potrzebuje żadnych sekretów.
+
+on:
+  workflow_dispatch:
+    inputs:
+      paczka:
+        description: "Adres podpisanej paczki .zip na klyo.pl"
+        required: true
+        default: "https://klyo.pl/klyo-switcher/Klyo-Switcher-1.5.0-uniwersalny.zip"
+
+jobs:
+  obraz:
+    runs-on: macos-15
+    steps:
+      - name: Pobierz podpisaną aplikację
+        run: |
+          set -euo pipefail
+          curl -fsSL -o paczka.zip "${{ inputs.paczka }}"
+          mkdir -p scena
+          ditto -x -k paczka.zip scena
+          app="$(find scena -maxdepth 1 -name "*.app" | head -1)"
+          [ -n "$app" ] || { echo "w paczce nie ma programu"; exit 1; }
+          echo "APP=$app" >> "$GITHUB_ENV"
+          wersja=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$app/Contents/Info.plist")
+          echo "WERSJA=$wersja" >> "$GITHUB_ENV"
+          echo "Aplikacja: $app (wersja $wersja)"
+          # Podpis musi przeżyć rozpakowanie — jeśli nie przeżył, obraz nie ma sensu.
+          codesign --verify --deep --strict --verbose=1 "$app"
+
+      - name: Złóż obraz
+        run: |
+          set -euo pipefail
+          rm -rf okno && mkdir okno
+          cp -R "$APP" okno/
+          # Strzałka do katalogu Programy: użytkownik przeciąga ikonę i to wszystko.
+          ln -s /Applications "okno/Programy"
+          nazwa="Klyo-Switcher-${WERSJA}.dmg"
+          hdiutil create -volname "Klyo Switcher" -srcfolder okno \
+            -ov -format UDZO -imagekey zlib-level=9 "$nazwa"
+          hdiutil verify "$nazwa"
+          shasum -a 256 "$nazwa"
+          echo "DMG=$nazwa" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klyo-switcher-dmg
+          path: ${{ env.DMG }}
+          retention-days: 30
