@@ -282,6 +282,7 @@ enum Settings {
         static let historiaSchowka = "historiaSchowkaWlaczona"
         static let limitHistorii = "limitHistoriiSchowka"
         static let skrotSchowka = "skrotHistoriiSchowka"
+        static let skrotCzystegoTekstu = "skrotCzystegoTekstu"
         static let updateFeed = "updateFeedURL"
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -421,6 +422,27 @@ enum Settings {
         set {
             guard let data = try? PropertyListEncoder().encode(newValue) else { return }
             defaults.set(data, forKey: Key.skrotSchowka)
+        }
+    }
+
+    /// Domyslnie ⌥⇧⌘V - odpowiednik systemowego „wklej i dopasuj styl", ale dziala
+    /// w KAZDYM programie, nie tylko w tych, ktore ten skrot obsluguja.
+    static var skrotCzystegoTekstu: KeyCombo {
+        get {
+            guard let data = defaults.data(forKey: Key.skrotCzystegoTekstu),
+                  let combo = try? PropertyListDecoder().decode(KeyCombo.self, from: data) else {
+                return KeyCombo(
+                    keyCode: 9,
+                    modifiers: CGEventFlags.maskCommand.rawValue
+                        | CGEventFlags.maskShift.rawValue
+                        | CGEventFlags.maskAlternate.rawValue
+                )
+            }
+            return combo
+        }
+        set {
+            guard let data = try? PropertyListEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.skrotCzystegoTekstu)
         }
     }
 

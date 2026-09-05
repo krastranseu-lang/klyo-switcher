@@ -93,6 +93,7 @@ final class SettingsStore: ObservableObject {
     }
     @Published var limitHistorii: Int = 200 { didSet { commit { Settings.limitHistoriiSchowka = limitHistorii } } }
     @Published var skrotSchowka: KeyCombo = .unset { didSet { commit { Settings.skrotHistoriiSchowka = skrotSchowka } } }
+    @Published var skrotCzysty: KeyCombo = .unset { didSet { commit { Settings.skrotCzystegoTekstu = skrotCzysty } } }
 
     @Published var screenshotEnabled: Bool = true { didSet { commit { Settings.screenshotEnabled = screenshotEnabled } } }
     @Published var screenshotCombo: KeyCombo = .unset { didSet { commit { Settings.screenshotCombo = screenshotCombo } } }
@@ -120,6 +121,7 @@ final class SettingsStore: ObservableObject {
         historiaSchowka = Settings.historiaSchowkaWlaczona
         limitHistorii = Settings.limitHistoriiSchowka
         skrotSchowka = Settings.skrotHistoriiSchowka
+        skrotCzysty = Settings.skrotCzystegoTekstu
         screenshotEnabled = Settings.screenshotEnabled
         screenshotCombo = Settings.screenshotCombo
         screenshotMaxKB = Settings.screenshotMaxKB
@@ -409,6 +411,17 @@ struct SettingsView: View {
                     }
                     .disabled(!store.historiaSchowka)
                     Text("Otwiera listę skopiowanych rzeczy: pisz, żeby szukać, strzałki wybierają, Enter wkleja tam, gdzie właśnie piszesz. Obrazy i zrzuty ekranu pokazują się miniaturą.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Wklejanie bez formatowania") {
+                    HStack {
+                        Text("Skrót")
+                        KeyRecorder(combo: store.skrotCzysty) { store.skrotCzysty = $0 }
+                    }
+                    Text("Wkleja to, co masz w schowku, jako czysty tekst — bez czcionki, koloru i tła ze strony, z której kopiowałeś. Działa w każdym programie, także w tych, które nie mają własnego „wklej i dopasuj styl”.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

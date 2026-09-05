@@ -200,6 +200,12 @@ final class HistoriaSchowka: ObservableObject {
         }
     }
 
+    /// Uprzedza monitor, ze najblizsza zmiana schowka pochodzi od nas - inaczej
+    /// program zapisalby w historii to, co sam przed chwila wstawil.
+    func przygotujWlasnyZapis() {
+        wlasnyZapis = true
+    }
+
     func obraz(dla wpis: WpisSchowka) -> NSImage? {
         guard let plik = wpis.plik else { return nil }
         return NSImage(contentsOf: katalog.appendingPathComponent(plik))
@@ -251,6 +257,31 @@ final class HistoriaSchowka: ObservableObject {
 // MARK: - Wklejanie do aktywnego programu
 
 enum Wklejanie {
+    /// Zamienia zawartosc schowka na czysty tekst i wkleja. Codzienna zmora przy
+    /// przenoszeniu tresci ze strony do dokumentu: bez tego wchodzi razem z czcionka,
+    /// kolorem i tlem, ktore potem trzeba recznie czyscic.
+    /// Zwraca `false`, gdy w schowku nie ma nic, co da sie zamienic na tekst.
+    @discardableResult
+    static func wklejBezFormatowania() -> Bool {
+        let schowek = NSPasteboard.general
+        var czysty: String?
+        if let tekst = schowek.string(forType: .string) {
+            czysty = tekst
+        } else if let rtf = schowek.data(forType: .rtf),
+                  let tekst = NSAttributedString(rtf: rtf, documentAttributes: nil)?.string {
+            czysty = tekst
+        } else if let html = schowek.data(forType: .html),
+                  let tekst = NSAttributedString(html: html, documentAttributes: nil)?.string {
+            czysty = tekst
+        }
+        guard let tekst = czysty, !tekst.isEmpty else { return false }
+        HistoriaSchowka.shared.przygotujWlasnyZapis()
+        schowek.clearContents()
+        schowek.setString(tekst, forType: .string)
+        wyslijSkrotWklejenia()
+        return true
+    }
+
     /// Wysyla ⌘V do programu, ktory jest na wierzchu. Uzywane po wybraniu wpisu
     /// z historii: uzytkownik oczekuje, ze tresc od razu wyladuje tam, gdzie pisze.
     static func wyslijSkrotWklejenia() {

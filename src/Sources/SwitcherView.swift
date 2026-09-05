@@ -3,11 +3,12 @@ import SwiftUI
 
 enum HUDLayout {
     static let padding: CGFloat = 18
-    static let cardWidth: CGFloat = 172
-    static let cardHeight: CGFloat = 158
-    /// Kadr 156×88 - proporcje ekranu, wiec caly zrzut okna miesci sie bez ucinania.
-    static let previewHeight: CGFloat = 88
-    static let gap: CGFloat = 10
+    static let cardWidth: CGFloat = 186
+    static let cardHeight: CGFloat = 168
+    /// Kadr 170×106 - proporcje zblizone do ekranu, wiec caly zrzut okna miesci sie
+    /// bez ucinania, a miniatura jest na tyle duza, ze widac, co jest w oknie.
+    static let previewHeight: CGFloat = 106
+    static let gap: CGFloat = 12
     static let sectionGap: CGFloat = 14
     static let footerHeight: CGFloat = 40
     static let maxColumns: Int = 7
@@ -218,7 +219,8 @@ struct SwitcherView: View {
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.1), value: model.selection)
+            .animation(.spring(response: 0.22, dampingFraction: 0.78), value: model.selection)
+            .animation(.easeOut(duration: 0.14), value: model.items.count)
 
             footer
         }
@@ -233,11 +235,12 @@ struct SwitcherView: View {
                 )
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.35), radius: 30, y: 12)
     }
 
     // MARK: - Stopka
@@ -304,6 +307,7 @@ struct SwitcherView: View {
             hint("←→↑↓", "wybór")
             hint("\(symbol)1–9", "skok")
             hint("pisz", "szukaj")
+            hint("⌘⇧V", "schowek")
             hint("\(symbol)W", "zamknij okno")
             hint("\(symbol)Q", "zakończ aplikację")
             hint("esc", "anuluj")
@@ -336,10 +340,10 @@ struct SwitcherView: View {
             preview(for: item, showsControls: showsControls)
 
             Text(item.title)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 27, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
 
             HStack(spacing: 3) {
                 if item.isMinimized {
@@ -353,19 +357,25 @@ struct SwitcherView: View {
             }
             .foregroundStyle(.secondary)
         }
-        .padding(8)
+        .padding(9)
         .frame(width: HUDLayout.cardWidth, height: HUDLayout.cardHeight, alignment: .top)
         .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.28) : Color.primary.opacity(0.05))
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.26) : Color.primary.opacity(0.045))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .strokeBorder(
-                    isSelected ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.05),
-                    lineWidth: isSelected ? 1.6 : 1
+                    isSelected ? Color.accentColor.opacity(0.95) : Color.white.opacity(0.055),
+                    lineWidth: isSelected ? 1.8 : 1
                 )
         )
+        // Wybrana karta stoi minimalnie blizej patrzacego. Cien rysujemy TYLKO pod nia:
+        // cien pod kazda karta zamienilby liste w szarą papkę i kosztowal klatki
+        // na starszym sprzecie.
+        .shadow(color: Color.black.opacity(isSelected ? 0.28 : 0), radius: isSelected ? 14 : 0, y: isSelected ? 5 : 0)
+        .scaleEffect(isSelected ? 1.035 : 1.0)
+        .zIndex(isSelected ? 1 : 0)
         .contentShape(Rectangle())
         .onTapGesture {
             if let index = model.index(of: item.id) {
@@ -389,8 +399,8 @@ struct SwitcherView: View {
     private func preview(for item: SwitcherItem, showsControls: Bool) -> some View {
         let symbol = Settings.modifier.symbol
         return ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.black.opacity(0.20))
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.black.opacity(0.26))
 
             if let thumbnail = item.thumbnail {
                 Image(nsImage: thumbnail)
@@ -402,7 +412,7 @@ struct SwitcherView: View {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 52, height: 52)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
@@ -441,11 +451,11 @@ struct SwitcherView: View {
                 .padding(4)
             }
         }
-        .frame(width: HUDLayout.cardWidth - 16, height: HUDLayout.previewHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .frame(width: HUDLayout.cardWidth - 18, height: HUDLayout.previewHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
         )
     }
 
