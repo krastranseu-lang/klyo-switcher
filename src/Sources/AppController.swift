@@ -21,11 +21,46 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        if !Permissions.accessibilityGranted {
-            Permissions.requestAccessibility()
+        sprzatnijStareKopie()
+
+        if Permissions.accessibilityGranted {
+            // Zapamietujemy, ze zgoda dziala. Gdy kiedys przestanie, bedziemy
+            // wiedziec, ze to zerwane powiazanie, a nie brak zgody.
+            Permissions.zgodaKiedysDzialala = true
+        } else {
+            let martwa = Permissions.zgodaMartwa
+            if !martwa { Permissions.requestAccessibility() }
             // Okno pokazuje stan KAZDEJ zgody i mowi, co dokladnie kliknac -
             // zamiast alertu, ktory tylko odsyla do Ustawien.
-            OknoUprawnienController.shared.pokaz()
+            OknoUprawnienController.shared.pokaz(zgodaMartwa: martwa)
+        }
+    }
+
+    /// Kopie z numerem w nazwie („Klyo Switcher 2.app") powstaja, gdy nowa wersja
+    /// trafia OBOK starej - przy rozpakowaniu paczki do katalogu, w ktorym program
+    /// juz lezy. Dla systemu kazda taka kopia to osobny program z osobna zgoda,
+    /// wiec czlowiek wlacza zgode jednej, a uruchamia sie druga i nic nie dziala.
+    /// Zostawiamy wylacznie te kopie, ktora wlasnie dziala.
+    private func sprzatnijStareKopie() {
+        let menedzer = FileManager.default
+        let moja = Bundle.main.bundlePath
+        let nazwa = ((moja as NSString).lastPathComponent as NSString).deletingPathExtension
+        let dom = NSHomeDirectory()
+        let katalogi = ["/Applications", "\(dom)/Applications", "\(dom)/Downloads", "\(dom)/Desktop"]
+
+        for katalog in katalogi {
+            guard let pliki = try? menedzer.contentsOfDirectory(atPath: katalog) else { continue }
+            for plik in pliki where plik.hasSuffix(".app") {
+                let sciezka = "\(katalog)/\(plik)"
+                guard sciezka != moja else { continue }
+                let bez = (plik as NSString).deletingPathExtension
+                // Tylko „nazwa + spacja + numer". Nic innego nie ruszamy.
+                guard bez.hasPrefix(nazwa + " ") else { continue }
+                let reszta = bez.dropFirst(nazwa.count + 1)
+                guard !reszta.isEmpty, reszta.allSatisfy({ $0.isNumber }) else { continue }
+                guard Bundle(path: sciezka)?.bundleIdentifier == Bundle.main.bundleIdentifier else { continue }
+                try? menedzer.trashItem(at: URL(fileURLWithPath: sciezka), resultingItemURL: nil)
+            }
         }
     }
 
