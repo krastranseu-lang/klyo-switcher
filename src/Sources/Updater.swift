@@ -9,6 +9,11 @@ final class Updater {
         let build: Int
         let notes: String?
         let installScriptURL: String
+        /// Gotowy, podpisany program. Gdy jest, aktualizacja polega na pobraniu
+        /// pliku i podmianie - bez kompilatora, bez narzedzi Apple, bez Terminala.
+        let packageURL: String?
+        /// Suma kontrolna paczki. Bez zgodnej sumy NIC nie jest podmieniane.
+        let packageSHA256: String?
         let minimumSystemVersion: String?
     }
 
@@ -128,8 +133,11 @@ final class Updater {
         case .available(let appcast):
             let alert = NSAlert()
             alert.messageText = "Dostępna wersja \(appcast.version)"
+            let sposob = appcast.packageURL != nil
+                ? "Aktualizacja pobierze gotowy program i podmieni go w tle. Zajmie kilkanaście sekund."
+                : "Aktualizacja zbuduje nową wersję na tym Macu i uruchomi ją ponownie."
             alert.informativeText = (appcast.notes?.isEmpty == false ? appcast.notes! + "\n\n" : "")
-                + "Masz wersję \(AppInfo.version). Aktualizacja zbuduje nową wersję na tym Macu i uruchomi ją ponownie."
+                + "Masz wersję \(AppInfo.version). " + sposob
             alert.alertStyle = .informational
             alert.addButton(withTitle: "Zaktualizuj teraz")
             alert.addButton(withTitle: "Później")
@@ -151,7 +159,16 @@ final class Updater {
     // MARK: - Instalacja
 
     private func install(_ appcast: Appcast) {
-        guard !isInstalling, let url = URL(string: appcast.installScriptURL) else { return }
+        guard !isInstalling else { return }
+        // Droga glowna: gotowy program. Uzytkownik nie potrzebuje do tego ani
+        // kompilatora, ani narzedzi Apple - a to wlasnie o nie rozbijala sie
+        // aktualizacja na swiezym systemie.
+        if let adres = appcast.packageURL, let url = URL(string: adres) {
+            isInstalling = true
+            pobierzPaczke(url, oczekiwanaSuma: appcast.packageSHA256, wersja: appcast.version)
+            return
+        }
+        guard let url = URL(string: appcast.installScriptURL) else { return }
         isInstalling = true
         ToastPresenter.shared.show("Pobieram aktualizację \(appcast.version)…", symbol: "arrow.down.circle.fill")
 
@@ -175,6 +192,92 @@ final class Updater {
                 self.run(scriptURL)
             }
         }.resume()
+    }
+
+    // MARK: - Aktualizacja gotowym programem
+
+    private func pobierzPaczke(_ url: URL, oczekiwanaSuma: String?, wersja: String) {
+        ToastPresenter.shared.show("Pobieram wersję \(wersja)…", symbol: "arrow.down.circle.fill")
+        var zadanie = URLRequest(url: url)
+        zadanie.cachePolicy = .reloadIgnoringLocalCacheData
+        zadanie.timeoutInterval = 180
+
+        URLSession.shared.downloadTask(with: zadanie) { [weak self] plik, odpowiedz, blad in
+            guard let self else { return }
+            guard let plik, blad == nil,
+                  let http = odpowiedz as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                DispatchQueue.main.async {
+                    self.isInstalling = false
+                    ToastPresenter.shared.show("Nie udało się pobrać aktualizacji.", symbol: "exclamationmark.triangle.fill")
+                }
+                return
+            }
+            // Plik tymczasowy zniknie po powrocie z tej funkcji, wiec od razu
+            // przenosimy go w miejsce, ktore kontrolujemy.
+            let paczka = FileManager.default.temporaryDirectory
+                .appendingPathComponent("klyo-switcher-\(wersja).zip")
+            try? FileManager.default.removeItem(at: paczka)
+            do {
+                try FileManager.default.moveItem(at: plik, to: paczka)
+            } catch {
+                DispatchQueue.main.async {
+                    self.isInstalling = false
+                    ToastPresenter.shared.show("Nie udało się zapisać aktualizacji.", symbol: "exclamationmark.triangle.fill")
+                }
+                return
+            }
+            DispatchQueue.main.async {
+                self.podmien(paczka: paczka, oczekiwanaSuma: oczekiwanaSuma, wersja: wersja)
+            }
+        }.resume()
+    }
+
+    /// Podmiana dzieje sie w skrypcie POZA tym procesem, bo program nie moze
+    /// nadpisac samego siebie w trakcie dzialania. Skrypt sprawdza sume kontrolna,
+    /// rozpakowuje paczke, sprawdza podpis Apple i dopiero WTEDY podmienia program.
+    /// Kazdy z tych krokow, gdy zawiedzie, zostawia dotychczasowa wersje nietknieta.
+    private func podmien(paczka: URL, oczekiwanaSuma: String?, wersja: String) {
+        let mojaSciezka = Bundle.main.bundlePath
+        let dziennik = FileManager.default.temporaryDirectory.appendingPathComponent("klyo-switcher-update.log").path
+        let suma = oczekiwanaSuma ?? ""
+        let skrypt = """
+        set -e
+        paczka="\(paczka.path)"
+        cel="\(mojaSciezka)"
+        suma="\(suma)"
+        if [ -n "$suma" ]; then
+          policzona=$(/usr/bin/shasum -a 256 "$paczka" | awk '{print $1}')
+          if [ "$policzona" != "$suma" ]; then
+            echo "suma kontrolna sie nie zgadza: $policzona != $suma"
+            exit 1
+          fi
+          echo "suma kontrolna zgodna"
+        fi
+        katalog=$(/usr/bin/mktemp -d)
+        /usr/bin/ditto -x -k "$paczka" "$katalog"
+        nowa=$(/usr/bin/find "$katalog" -maxdepth 1 -name "*.app" | /usr/bin/head -1)
+        [ -n "$nowa" ] || { echo "w paczce nie ma programu"; exit 1; }
+        /usr/bin/codesign --verify --deep --strict "$nowa" || { echo "podpis nowej wersji nie przechodzi kontroli"; exit 1; }
+        /usr/bin/pkill -x KlyoSwitcher || true
+        sleep 1
+        /bin/rm -rf "$cel"
+        /bin/cp -R "$nowa" "$cel"
+        /usr/bin/xattr -dr com.apple.quarantine "$cel" || true
+        /bin/rm -rf "$katalog" "$paczka"
+        /usr/bin/open "$cel"
+        echo "podmieniono na wersje \(wersja)"
+        """
+        let proces = Process()
+        proces.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proces.arguments = ["-c", "nohup /bin/bash -c \(skrypt.shellEscaped()) > \(dziennik) 2>&1 &"]
+        do {
+            try proces.run()
+        } catch {
+            isInstalling = false
+            ToastPresenter.shared.show("Nie udało się uruchomić aktualizacji.", symbol: "exclamationmark.triangle.fill")
+            return
+        }
+        ToastPresenter.shared.show("Podmieniam program — za chwilę wystartuje wersja \(wersja).", symbol: "arrow.triangle.2.circlepath")
     }
 
     /// Skrypt startuje odlaczony od naszego procesu: sam buduje nowa wersje, a dopiero po
@@ -201,5 +304,13 @@ final class Updater {
         DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak self] in
             self?.isInstalling = false
         }
+    }
+}
+
+private extension String {
+    /// Cala tresc skryptu jako JEDEN argument powloki. Bez tego kazdy apostrof
+    /// w sciezce (a katalog uzytkownika moze go miec) rozerwalby polecenie.
+    func shellEscaped() -> String {
+        "'" + replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
