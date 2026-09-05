@@ -102,7 +102,8 @@ final class ModelUprawnien: ObservableObject {
         zegar = nil
     }
 
-    private func odswiez() {
+    /// Wolane takze z widoku, zaraz po naprawie wpisu zgody.
+    func odswiez() {
         var nowy: [RodzajZgody: Bool] = [:]
         for zgoda in RodzajZgody.allCases {
             nowy[zgoda] = zgoda.nadana
@@ -195,6 +196,8 @@ struct WidokUprawnien: View {
     /// Osobny komunikat na wypadek, gdy w Ustawieniach jest ptaszek, a program
     /// i tak nie dziala. To najczesciej zdarza sie po aktualizacji, ktora zmienila
     /// podpis programu: zgoda zostaje przypisana do STAREJ tozsamosci.
+    @State private var naprawiam = false
+
     private var zgodaMartwaPasek: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
@@ -203,23 +206,40 @@ struct WidokUprawnien: View {
                 Text("Zgoda jest zaznaczona, ale system jej nie honoruje")
                     .font(.system(size: 13, weight: .semibold))
             }
-            Text("Tak dzieje się po podmianie programu na wersję z innym podpisem: macOS przypisuje zgodę do konkretnej kopii programu, a nowa jej nie dziedziczy. Ptaszek w Ustawieniach zostaje po starej. Trzeba go usunąć i dodać na nowo — zajmuje to kilkanaście sekund.")
+            Text("macOS przypisał zgodę do poprzedniej kopii programu, a ta nie może jej odziedziczyć. Ptaszek w Ustawieniach dotyczy tamtej kopii — dlatego jego przełączanie nic nie daje. Mogę usunąć nieaktualny wpis za Ciebie: system zapyta o zgodę jeszcze raz i wystarczy jedno kliknięcie.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 4) {
-                krok(1, "Otwórz Dostępność przyciskiem poniżej.")
-                krok(2, "Zaznacz na liście „\(AppInfo.name)” i kliknij minus, żeby usunąć wpis.")
-                krok(3, "Kliknij plus, wskaż program w katalogu Programy i włącz przełącznik.")
+            HStack(spacing: 8) {
+                Button {
+                    naprawiam = true
+                    if Permissions.naprawZgode() {
+                        // Po usunieciu wpisu system pyta o zgode dopiero przy
+                        // nastepnym siegnieciu po dostep - wiec od razu pytamy.
+                        Permissions.requestAccessibility()
+                        model.odswiez()
+                    }
+                    naprawiam = false
+                } label: {
+                    Label(naprawiam ? "Naprawiam…" : "Napraw to za mnie", systemImage: "wand.and.stars")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.orange)
+                .disabled(naprawiam)
+
+                Button {
+                    RodzajZgody.dostepnosc.otworzUstawienia()
+                } label: {
+                    Text("Wolę zrobić to sam")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
             }
-            Button {
-                RodzajZgody.dostepnosc.otworzUstawienia()
-            } label: {
-                Label("Otwórz: Prywatność i ochrona → Dostępność", systemImage: "arrow.up.forward.app")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.orange)
+            Text("Gdy wolisz ręcznie: Ustawienia → Prywatność i ochrona → Dostępność, zaznacz „\(AppInfo.name)”, kliknij minus, potem plus i wskaż program w katalogu Programy.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
