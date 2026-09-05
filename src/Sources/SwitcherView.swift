@@ -12,8 +12,6 @@ enum HUDLayout {
     static let sectionGap: CGFloat = 14
     static let footerHeight: CGFloat = 40
     static let maxColumns: Int = 7
-    /// Przesuniecie kursora krotsze niz ta odleglosc to szum sensora, nie decyzja uzytkownika.
-    static let pointerArmDistance: CGFloat = 4
 
     static func columns(for count: Int, screenWidth: CGFloat) -> Int {
         guard count > 0 else { return 1 }
@@ -50,14 +48,12 @@ final class SwitcherModel: ObservableObject {
     @Published var selection: Int = 0
     @Published var columns: Int = 1
     @Published var hoveredID: String?
-    /// Mysz "lapie" karty dopiero po tym, jak uzytkownik nia RUSZY. Bez tego kursor
-    /// stojacy na srodku ekranu wybieral karte w chwili otwarcia HUD-a i puszczenie
-    /// modyfikatora przelaczalo nie tam, dokad prowadzila klawiatura.
-    @Published private(set) var pointerArmed = false
-    private var pointerOrigin: NSPoint = .zero
+    /// Mysz slnie NIE wybiera - to byla prosba uzytkownika po realnej pomylce:
+    /// kursor stojacy na srodku ekranu przestawial wybor tuz przed puszczeniem
+    /// modyfikatora i program przelaczal na zle okno. Zostaje samo podswietlenie
+    /// pod kursorem, zeby bylo widac, w co trafi klikniecie.
 
     var onPick: ((Int) -> Void)?
-    var onHover: ((Int) -> Void)?
     var onClose: ((Int) -> Void)?
     var onQuit: ((Int) -> Void)?
 
@@ -142,35 +138,9 @@ final class SwitcherModel: ObservableObject {
 
     // MARK: - Mysz
 
-    func resetPointer(origin: NSPoint) {
-        pointerOrigin = origin
-        pointerArmed = false
+    /// Nowa sesja zaczyna sie bez podswietlenia pod kursorem.
+    func wyczyscPodswietlenie() {
         hoveredID = nil
-    }
-
-    func pointerMoved(over id: String) {
-        if !pointerArmed {
-            let location = NSEvent.mouseLocation
-            let distance = hypot(location.x - pointerOrigin.x, location.y - pointerOrigin.y)
-            guard distance >= HUDLayout.pointerArmDistance else { return }
-            pointerArmed = true
-        }
-        if hoveredID != id {
-            hoveredID = id
-        }
-        if let index = index(of: id), index != selection {
-            onHover?(index)
-        }
-    }
-
-    func pointerLeft(_ id: String) {
-        if hoveredID == id {
-            hoveredID = nil
-        }
-    }
-
-    func showsControls(for item: SwitcherItem) -> Bool {
-        selectedItem?.id == item.id || (pointerArmed && hoveredID == item.id)
     }
 
     // MARK: - Klawiatura
@@ -334,10 +304,12 @@ struct SwitcherView: View {
 
     private func card(for item: SwitcherItem) -> some View {
         let isSelected = model.selectedItem?.id == item.id
-        let showsControls = model.showsControls(for: item)
+        // Przyciski widac ZAWSZE. Chowanie ich pod kursorem zmuszaloby do szukania
+        // ich myszka, a mysz w tym oknie celowo nic nie wybiera.
+        let showsControls = true
 
         return VStack(alignment: .leading, spacing: 7) {
-            preview(for: item, showsControls: showsControls)
+            preview(for: item, showsControls: showsControls, isSelected: isSelected)
 
             Text(item.title)
                 .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
@@ -382,21 +354,19 @@ struct SwitcherView: View {
                 model.onPick?(index)
             }
         }
-        // Sledzenie ciagle (a nie tylko wejscie/wyjscie): dopiero prawdziwy ruch
-        // kursora uzbraja mysz - kursor stojacy pod HUD-em niczego nie wybiera.
-        .onContinuousHover { phase in
-            if case .active = phase {
-                model.pointerMoved(over: item.id)
-            } else {
-                model.pointerLeft(item.id)
-            }
+        // Mysz NIE zmienia zaznaczenia. Wybiera wylacznie klawiatura albo klikniecie -
+        // kursor stojacy gdziekolwiek na ekranie nie ma prawa przestawic wyboru,
+        // bo to przy szybkiej pracy z ⌘ Tab kosztowalo trafienie w zle okno.
+        // Podswietlenie pod kursorem zostaje, ale to tylko podpowiedz, w co trafi klik.
+        .onHover { wewnatrz in
+            model.hoveredID = wewnatrz ? item.id : (model.hoveredID == item.id ? nil : model.hoveredID)
         }
     }
 
     /// Kadr o stalych proporcjach - dzieki temu rzad kart wyglada jak rzad, a nie
     /// jak zbior obrazkow o przypadkowych wysokosciach. Zrzut okna jest dopasowany
     /// w calosci (bez ucinania), jak w podgladzie Windows i Mission Control.
-    private func preview(for item: SwitcherItem, showsControls: Bool) -> some View {
+    private func preview(for item: SwitcherItem, showsControls: Bool, isSelected: Bool) -> some View {
         let symbol = Settings.modifier.symbol
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -449,6 +419,7 @@ struct SwitcherView: View {
                     }
                 }
                 .padding(4)
+                .opacity(isSelected || model.hoveredID == item.id ? 1 : 0.55)
             }
         }
         .frame(width: HUDLayout.cardWidth - 18, height: HUDLayout.previewHeight)

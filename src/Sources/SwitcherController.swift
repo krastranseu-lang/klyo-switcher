@@ -56,10 +56,6 @@ final class SwitcherController {
             self?.model.selection = index
             self?.commit()
         }
-        model.onHover = { [weak self] index in
-            guard let self, self.sessionActive else { return }
-            self.model.selection = index
-        }
         model.onClose = { [weak self] index in
             self?.closeItem(at: index)
         }
@@ -224,7 +220,7 @@ final class SwitcherController {
         model.ustawWszystkie(items)
         model.columns = columns
         model.selection = selection
-        model.resetPointer(origin: NSEvent.mouseLocation)
+        model.wyczyscPodswietlenie()
 
         showPanel(on: screen, itemCount: count)
         sessionActive = true
