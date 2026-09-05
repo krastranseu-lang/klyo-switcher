@@ -78,16 +78,34 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let konfiguracja = NSWorkspace.OpenConfiguration()
         konfiguracja.activates = true
         konfiguracja.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: cel), configuration: konfiguracja) { _, _ in
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: cel), configuration: konfiguracja) { program, blad in
             DispatchQueue.main.async {
+                guard program != nil, blad == nil else { return }
                 NSApp.terminate(nil)
             }
         }
-        // Gdyby system nie odpowiedzial, nie zostawiamy dwoch kopii w pamieci.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            NSApp.terminate(nil)
-        }
+        // Zamykamy sie DOPIERO wtedy, gdy nowa kopia naprawde dziala. Bezwarunkowe
+        // zamkniecie po czasie zostawialo uzytkownika bez programu, gdy system
+        // nie zdazyl uruchomic kopii w Programach.
+        potwierdzUruchomienie(cel: cel, prob: 6)
         return true
+    }
+
+    /// Sprawdza, czy kopia w Programach naprawde ruszyla. Dopiero wtedy TA kopia
+    /// konczy prace. Gdy po kilku probach nic nie dziala, zostajemy uruchomieni -
+    /// dzialajacy program w Pobranych jest lepszy niz zaden.
+    private func potwierdzUruchomienie(cel: String, prob: Int) {
+        guard prob > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            let dziala = NSWorkspace.shared.runningApplications.contains { program in
+                program.processIdentifier != getpid() && program.bundleURL?.path == cel
+            }
+            if dziala {
+                NSApp.terminate(nil)
+            } else {
+                self?.potwierdzUruchomienie(cel: cel, prob: prob - 1)
+            }
+        }
     }
 
     /// Dwie kopie tego samego programu nie moga chodzic naraz - obie walczylyby

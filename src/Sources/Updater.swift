@@ -264,7 +264,34 @@ final class Updater {
         /bin/cp -R "$nowa" "$cel"
         /usr/bin/xattr -dr com.apple.quarantine "$cel" || true
         /bin/rm -rf "$katalog" "$paczka"
-        /usr/bin/open "$cel"
+
+        # macOS trzyma w pamieci opis STAREJ kopii programu (sciezka, podpis,
+        # identyfikator). Zaraz po podmianie `open` potrafi trafic w ten nieaktualny
+        # opis i nie uruchomic nic - program znika, a uzytkownik widzi tylko, ze
+        # "po aktualizacji sie nie wlaczylo". Odswiezenie rejestru to naprawia.
+        rejestr=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+        [ -x "$rejestr" ] && "$rejestr" -f "$cel" 2>/dev/null || true
+        sleep 1
+
+        # Uruchomienie ponawiane: system potrzebuje chwili po podmianie katalogu,
+        # a pierwsza proba potrafi trafic w moment, gdy jeszcze nie jest gotowy.
+        uruchomione=0
+        for proba in 1 2 3 4 5; do
+          if /usr/bin/open -n "$cel" 2>/dev/null; then
+            sleep 2
+            if /usr/bin/pgrep -x KlyoSwitcher > /dev/null 2>&1; then
+              echo "uruchomiono za ${proba} razem"
+              uruchomione=1
+              break
+            fi
+          fi
+          sleep 2
+        done
+
+        if [ "$uruchomione" != "1" ]; then
+          echo "nie udalo sie uruchomic programu po podmianie"
+          /usr/bin/osascript -e 'display notification "Nowa wersja jest gotowa, ale nie wystartowała sama. Uruchom Klyo Switcher z katalogu Programy." with title "Klyo Switcher"' 2>/dev/null || true
+        fi
         echo "podmieniono na wersje \(wersja)"
         """
         let proces = Process()
