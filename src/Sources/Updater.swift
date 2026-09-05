@@ -3,6 +3,10 @@ import AppKit
 /// Sprawdzanie aktualizacji przez maly plik opisowy (appcast) pod adresem z ustawien.
 /// Aktualizacja polega na pobraniu tego samego skryptu instalacyjnego, ktorym
 /// aplikacja zostala zbudowana - buduje nowa wersje na miejscu i sam ja uruchamia.
+/// Droga glowna jest inna: pobieramy GOTOWY program podpisany naszym stalym
+/// certyfikatem i przestawiamy nazwy tak, by sciezka i tozsamosc programu sie nie
+/// zmienily. Tylko wtedy zgody systemowe przezywaja aktualizacje - tak samo jak
+/// w Chrome czy VS Code.
 final class Updater {
     struct Appcast: Decodable {
         let version: String
@@ -260,10 +264,55 @@ final class Updater {
         /usr/bin/codesign --verify --deep --strict "$nowa" || { echo "podpis nowej wersji nie przechodzi kontroli"; exit 1; }
         /usr/bin/pkill -x KlyoSwitcher || true
         sleep 1
-        /bin/rm -rf "$cel"
-        /bin/cp -R "$nowa" "$cel"
-        /usr/bin/xattr -dr com.apple.quarantine "$cel" || true
-        /bin/rm -rf "$katalog" "$paczka"
+
+        # Podmiana przez PRZESTAWIENIE nazw, nie przez skasowanie i skopiowanie.
+        #
+        # To nie jest kosmetyka. macOS przypisuje zgody (Dostepnosc, Nagrywanie
+        # ekranu) konkretnemu programowi. Gdy program skasujemy i utworzymy nowy
+        # pod ta sama nazwa, system traktuje go jak przybysza: w Ustawieniach
+        # zostaje ptaszek po poprzedniku, a dzialajaca kopia nie ma prawa nic
+        # zrobic. Uzytkownik widzi wtedy najgorsza z mozliwych rzeczy - wlaczona
+        # zgode i program, ktory mimo to nie dziala.
+        #
+        # Dlatego nowa wersje najpierw kladziemy OBOK, a potem przestawiamy nazwy:
+        # stary schodzi na bok, nowy wchodzi na jego miejsce. Dla systemu to caly
+        # czas ten sam program pod ta sama sciezka, wiec zgody trwaja.
+        katalog_celu=$(/usr/bin/dirname "$cel")
+        obok="$katalog_celu/.klyo-nowa-$$.app"
+        ustepujaca="$katalog_celu/.klyo-poprzednia-$$.app"
+        /bin/rm -rf "$obok" "$ustepujaca"
+        /bin/cp -R "$nowa" "$obok"
+        /usr/bin/xattr -dr com.apple.quarantine "$obok" || true
+
+        if [ -e "$cel" ]; then
+          /bin/mv "$cel" "$ustepujaca" || { echo "nie moge odsunac starej wersji"; exit 1; }
+        fi
+        if ! /bin/mv "$obok" "$cel"; then
+          # Gdy cokolwiek pojdzie nie tak, wraca wersja, ktora dzialala.
+          [ -e "$ustepujaca" ] && /bin/mv "$ustepujaca" "$cel"
+          echo "podmiana sie nie powiodla - zostaje poprzednia wersja"
+          exit 1
+        fi
+        /bin/rm -rf "$ustepujaca" "$katalog" "$paczka"
+
+        # Kopie z numerem w nazwie („Klyo Switcher 2.app") biora sie stad, ze nowy
+        # plik trafil OBOK starego zamiast na jego miejsce. Kazda taka kopia to dla
+        # systemu osobny program z osobna zgoda - a uruchamia sie zwykle nie ta,
+        # ktorej zgode wlaczyl uzytkownik. Zostawiamy jedna, wlasciwa.
+        nazwa_bazowa=$(/usr/bin/basename "$cel" .app)
+        for katalog_kopii in /Applications "$HOME/Applications" "$HOME/Downloads" "$HOME/Desktop"; do
+          [ -d "$katalog_kopii" ] || continue
+          for kopia in "$katalog_kopii/$nazwa_bazowa "*.app; do
+            [ -e "$kopia" ] || continue
+            [ "$kopia" = "$cel" ] && continue
+            reszta=$(/usr/bin/basename "$kopia" .app | /usr/bin/sed "s/^${nazwa_bazowa} //")
+            case "$reszta" in
+              ''|*[!0-9]*) continue ;;   # tylko czysty numer, nic innego nie ruszamy
+            esac
+            echo "usuwam zbedna kopie: $kopia"
+            /bin/rm -rf "$kopia"
+          done
+        done
 
         # macOS trzyma w pamieci opis STAREJ kopii programu (sciezka, podpis,
         # identyfikator). Zaraz po podmianie `open` potrafi trafic w ten nieaktualny
