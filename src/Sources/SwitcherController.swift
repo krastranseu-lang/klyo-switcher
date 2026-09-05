@@ -106,6 +106,11 @@ final class SwitcherController {
 
         usage.start()
         browsers.start()
+        // Okno zgod nie ma jak zapytac systemu o zgode „Automatyzacja" wprost,
+        // wiec patrzy na skutek: czy karty przegladarek naprawde sie czytaja.
+        browsers.onZmianaKart = { ile in
+            HistoriaKartPrzegladarki.brakKart = (ile == 0)
+        }
         hotkey.install()
     }
 

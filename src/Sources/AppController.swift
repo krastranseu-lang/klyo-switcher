@@ -23,7 +23,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if !Permissions.accessibilityGranted {
             Permissions.requestAccessibility()
-            showAccessibilityIntro()
+            // Okno pokazuje stan KAZDEJ zgody i mowi, co dokladnie kliknac -
+            // zamiast alertu, ktory tylko odsyla do Ustawien.
+            OknoUprawnienController.shared.pokaz()
         }
     }
 
@@ -204,11 +206,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         update.target = self
         menu.addItem(update)
 
-        if !ready {
-            let accessibility = NSMenuItem(title: "Otwórz ustawienia: Dostępność…", action: #selector(openAccessibility), keyEquivalent: "")
-            accessibility.target = self
-            menu.addItem(accessibility)
-        }
+        let zgody = NSMenuItem(
+            title: ready ? "Zgody systemowe…" : "Brakuje zgody — pokaż, co zrobić…",
+            action: #selector(pokazZgody),
+            keyEquivalent: ""
+        )
+        zgody.target = self
+        menu.addItem(zgody)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -239,8 +243,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Updater.shared.check(manual: true)
     }
 
-    @objc private func openAccessibility() {
-        Permissions.openAccessibilitySettings()
+    @objc private func pokazZgody() {
+        OknoUprawnienController.shared.pokaz()
     }
 
     @objc private func pokazHistorieSchowka() {
@@ -268,29 +272,4 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: - Onboarding
-
-    private func showAccessibilityIntro() {
-        let alert = NSAlert()
-        alert.messageText = "Włącz zgodę „Dostępność”"
-        alert.informativeText = """
-        Aby \(AppInfo.name) mógł przechwytywać ⌘ + Tab i przełączać okna, dodaj go w:
-
-        Ustawienia systemowe → Prywatność i ochrona → Dostępność
-
-        Znajdź na liście „\(AppInfo.name)” i przesuń przełącznik na włączony. \
-        Aplikacja wykryje zgodę sama, nie trzeba jej restartować.
-        """
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Otwórz ustawienia")
-        alert.addButton(withTitle: "Później")
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        if alert.runModal() == .alertFirstButtonReturn {
-            Permissions.openAccessibilitySettings()
-        }
-    }
 }

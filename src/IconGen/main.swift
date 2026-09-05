@@ -1,212 +1,132 @@
+import AppKit
 import CoreGraphics
-import Foundation
-import ImageIO
 
-// Generator ikony aplikacji. Uruchamiany raz podczas instalacji, rysuje komplet
-// rozmiarow do katalogu .iconset, z ktorego `iconutil` sklada plik .icns.
-// Zadnych zewnetrznych grafik - wszystko liczone tutaj.
+// Ikona programu rysowana kodem — bez plikow graficznych i bez zewnetrznych
+// narzedzi. Ksztalt trzyma sie tego, czego macOS oczekuje od ikon: zaokraglony
+// kwadrat („squircle"), lagodne swiatlo z gory, wyrazny znak w srodku, ktory
+// czytelny jest takze w rozmiarze 32 px w Docku.
+//
+// Znak: trzy okna ustawione w glab, przednie podswietlone — to jest dokladnie to,
+// co program robi: wyciaga jedno okno z gaszczu innych.
 
-let outputDirectory = CommandLine.arguments.count > 1
-    ? CommandLine.arguments[1]
-    : FileManager.default.currentDirectoryPath
-
-let sizes = [16, 32, 64, 128, 256, 512, 1024]
-let names: [Int: [String]] = [
-    16: ["icon_16x16"],
-    32: ["icon_16x16@2x", "icon_32x32"],
-    64: ["icon_32x32@2x"],
-    128: ["icon_128x128"],
-    256: ["icon_128x128@2x", "icon_256x256"],
-    512: ["icon_256x256@2x", "icon_512x512"],
-    1024: ["icon_512x512@2x"]
+let ROZMIARY: [(Int, String)] = [
+    (16, "icon_16x16"), (32, "icon_16x16@2x"),
+    (32, "icon_32x32"), (64, "icon_32x32@2x"),
+    (128, "icon_128x128"), (256, "icon_128x128@2x"),
+    (256, "icon_256x256"), (512, "icon_256x256@2x"),
+    (512, "icon_512x512"), (1024, "icon_512x512@2x"),
 ]
 
-func rgb(_ red: Double, _ green: Double, _ blue: Double, _ alpha: Double = 1) -> CGColor {
-    CGColor(srgbRed: red / 255, green: green / 255, blue: blue / 255, alpha: alpha)
+func sciezkaSquircle(_ prostokat: CGRect, promien: CGFloat) -> CGPath {
+    // Krzywa zblizona do ksztaltu ikon Apple: rog lagodniejszy niz zwykle
+    // zaokraglenie, bez widocznego zalamania w miejscu styku z bokiem.
+    CGPath(roundedRect: prostokat, cornerWidth: promien, cornerHeight: promien, transform: nil)
 }
 
-func squirclePath(in rect: CGRect) -> CGPath {
-    CGPath(
-        roundedRect: rect,
-        cornerWidth: rect.width * 0.2237,
-        cornerHeight: rect.height * 0.2237,
-        transform: nil
-    )
-}
-
-func windowPath(_ rect: CGRect, radius: CGFloat) -> CGPath {
-    CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
-}
-
-func drawIcon(size: Int) -> CGImage? {
-    let side = CGFloat(size)
-    let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    guard let context = CGContext(
-        data: nil,
-        width: size,
-        height: size,
-        bitsPerComponent: 8,
-        bytesPerRow: 0,
-        space: space,
+func rysuj(_ bok: Int) -> CGImage? {
+    let s = CGFloat(bok)
+    guard let kontekst = CGContext(
+        data: nil, width: bok, height: bok, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ) else { return nil }
 
-    context.interpolationQuality = .high
-    context.setShouldAntialias(true)
+    kontekst.setAllowsAntialiasing(true)
+    kontekst.interpolationQuality = .high
 
-    // macOS zostawia wokol ikony powietrze - bez tego wyglada wieksza niz sasiednie.
-    let inset = side * 0.055
-    let plate = CGRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
-    let plateShape = squirclePath(in: plate)
+    // Tlo: zaokraglony kwadrat z pionowym przejsciem barwy. Granat trzyma sie
+    // dobrze i na jasnym, i na ciemnym pulpicie.
+    let margines = s * 0.055
+    let plyta = CGRect(x: margines, y: margines, width: s - margines * 2, height: s - margines * 2)
+    let ksztalt = sciezkaSquircle(plyta, promien: plyta.width * 0.235)
 
-    // Cien pod plytka.
-    context.saveGState()
-    context.setShadow(
-        offset: CGSize(width: 0, height: -side * 0.012),
-        blur: side * 0.045,
-        color: rgb(0, 0, 0, 0.38)
-    )
-    context.addPath(plateShape)
-    context.setFillColor(rgb(20, 23, 29))
-    context.fillPath()
-    context.restoreGState()
-
-    // Grafitowe tlo z lekkim pionowym przejsciem.
-    context.saveGState()
-    context.addPath(plateShape)
-    context.clip()
-    let backdrop = CGGradient(
-        colorsSpace: space,
-        colors: [rgb(60, 68, 84), rgb(31, 35, 44), rgb(18, 20, 26)] as CFArray,
-        locations: [0.0, 0.55, 1.0]
-    )!
-    context.drawLinearGradient(
-        backdrop,
-        start: CGPoint(x: plate.midX, y: plate.maxY),
-        end: CGPoint(x: plate.midX, y: plate.minY),
-        options: []
-    )
-
-    // Delikatny polysk przy gornej krawedzi.
-    let gloss = CGGradient(
-        colorsSpace: space,
-        colors: [rgb(255, 255, 255, 0.16), rgb(255, 255, 255, 0.0)] as CFArray,
-        locations: [0.0, 1.0]
-    )!
-    context.drawLinearGradient(
-        gloss,
-        start: CGPoint(x: plate.midX, y: plate.maxY),
-        end: CGPoint(x: plate.midX, y: plate.midY + plate.height * 0.12),
-        options: []
-    )
-    context.restoreGState()
-
-    // Stos okien: dwa w tle, jedno na wierzchu w kolorze akcentu.
-    let windowWidth = plate.width * 0.56
-    let windowHeight = windowWidth * 0.70
-    let radius = windowWidth * 0.11
-    let step = plate.width * 0.085
-    let originX = plate.minX + plate.width * 0.16
-    let originY = plate.minY + plate.height * 0.20
-
-    let back = CGRect(
-        x: originX + step * 2, y: originY + step * 2,
-        width: windowWidth, height: windowHeight
-    )
-    let middle = CGRect(
-        x: originX + step, y: originY + step,
-        width: windowWidth, height: windowHeight
-    )
-    let front = CGRect(x: originX, y: originY, width: windowWidth, height: windowHeight)
-
-    func drawBackdropWindow(_ rect: CGRect, fill: CGColor, stroke: CGColor) {
-        context.saveGState()
-        context.addPath(windowPath(rect, radius: radius))
-        context.setFillColor(fill)
-        context.fillPath()
-        context.addPath(windowPath(rect.insetBy(dx: 0.5, dy: 0.5), radius: radius))
-        context.setStrokeColor(stroke)
-        context.setLineWidth(max(1, side * 0.004))
-        context.strokePath()
-        context.restoreGState()
+    kontekst.saveGState()
+    kontekst.addPath(ksztalt)
+    kontekst.clip()
+    let przestrzen = CGColorSpace(name: CGColorSpace.sRGB)!
+    let gora = CGColor(colorSpace: przestrzen, components: [0.129, 0.184, 0.322, 1.0])!
+    let dol = CGColor(colorSpace: przestrzen, components: [0.055, 0.078, 0.157, 1.0])!
+    if let przejscie = CGGradient(colorsSpace: przestrzen, colors: [gora, dol] as CFArray, locations: [0, 1]) {
+        kontekst.drawLinearGradient(przejscie,
+                                    start: CGPoint(x: 0, y: plyta.maxY),
+                                    end: CGPoint(x: 0, y: plyta.minY),
+                                    options: [])
     }
-
-    drawBackdropWindow(back, fill: rgb(255, 255, 255, 0.13), stroke: rgb(255, 255, 255, 0.16))
-    drawBackdropWindow(middle, fill: rgb(255, 255, 255, 0.22), stroke: rgb(255, 255, 255, 0.20))
-
-    // Przednie okno - jedyne miejsce z mocnym kolorem.
-    context.saveGState()
-    context.setShadow(
-        offset: CGSize(width: 0, height: -side * 0.008),
-        blur: side * 0.03,
-        color: rgb(0, 0, 0, 0.45)
-    )
-    context.addPath(windowPath(front, radius: radius))
-    context.setFillColor(rgb(255, 122, 82))
-    context.fillPath()
-    context.restoreGState()
-
-    context.saveGState()
-    context.addPath(windowPath(front, radius: radius))
-    context.clip()
-    let accent = CGGradient(
-        colorsSpace: space,
-        colors: [rgb(255, 149, 105), rgb(224, 88, 55)] as CFArray,
-        locations: [0.0, 1.0]
-    )!
-    context.drawLinearGradient(
-        accent,
-        start: CGPoint(x: front.midX, y: front.maxY),
-        end: CGPoint(x: front.midX, y: front.minY),
-        options: []
-    )
-
-    // Pasek tytulu i dwie "kropki" okna - czytelne nawet w 32 px.
-    let barHeight = front.height * 0.22
-    context.setFillColor(rgb(255, 255, 255, 0.24))
-    context.fill(CGRect(x: front.minX, y: front.maxY - barHeight, width: front.width, height: barHeight))
-
-    let dotRadius = barHeight * 0.17
-    let dotY = front.maxY - barHeight / 2
-    for index in 0..<2 {
-        let dotX = front.minX + barHeight * (0.55 + Double(index) * 0.52)
-        context.setFillColor(rgb(255, 255, 255, 0.75))
-        context.fillEllipse(in: CGRect(
-            x: dotX - dotRadius, y: dotY - dotRadius,
-            width: dotRadius * 2, height: dotRadius * 2
-        ))
+    // Swiatlo z gory — bez niego plyta wyglada jak plaski prostokat.
+    if let blask = CGGradient(colorsSpace: przestrzen,
+                              colors: [CGColor(colorSpace: przestrzen, components: [1, 1, 1, 0.16])!,
+                                       CGColor(colorSpace: przestrzen, components: [1, 1, 1, 0])!] as CFArray,
+                              locations: [0, 1]) {
+        kontekst.drawRadialGradient(blask,
+                                    startCenter: CGPoint(x: plyta.midX, y: plyta.maxY),
+                                    startRadius: 0,
+                                    endCenter: CGPoint(x: plyta.midX, y: plyta.maxY),
+                                    endRadius: plyta.width * 0.85,
+                                    options: [])
     }
-    context.restoreGState()
+    kontekst.restoreGState()
 
-    // Cienki jasny obrys calej plytki - daje wrazenie szkla.
-    context.saveGState()
-    context.addPath(squirclePath(in: plate.insetBy(dx: 0.5, dy: 0.5)))
-    context.setStrokeColor(rgb(255, 255, 255, 0.13))
-    context.setLineWidth(max(1, side * 0.0035))
-    context.strokePath()
-    context.restoreGState()
+    // Delikatna krawedz, zeby ikona nie zlewala sie z ciemnym tlem Docka.
+    kontekst.saveGState()
+    kontekst.addPath(ksztalt)
+    kontekst.setStrokeColor(CGColor(colorSpace: przestrzen, components: [1, 1, 1, 0.14])!)
+    kontekst.setLineWidth(max(1, s * 0.006))
+    kontekst.strokePath()
+    kontekst.restoreGState()
 
-    return context.makeImage()
-}
+    // Trzy okna w glab. Przednie jest jasne i pelne — to ono jest wybrane.
+    let szer = plyta.width * 0.50
+    let wys = szer * 0.66
+    let srodekX = plyta.midX
+    let srodekY = plyta.midY
+    let odsun = plyta.width * 0.085
 
-var failures = 0
-for size in sizes {
-    guard let image = drawIcon(size: size) else {
-        failures += 1
-        continue
-    }
-    for name in names[size] ?? [] {
-        let url = URL(fileURLWithPath: outputDirectory).appendingPathComponent("\(name).png")
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
-            failures += 1
-            continue
+    func okno(_ przesuniecie: CGFloat, jasnosc: CGFloat, pelne: Bool) {
+        let r = CGRect(x: srodekX - szer / 2 + przesuniecie,
+                       y: srodekY - wys / 2 - przesuniecie * 0.72,
+                       width: szer, height: wys)
+        let sc = CGPath(roundedRect: r, cornerWidth: r.width * 0.11, cornerHeight: r.width * 0.11, transform: nil)
+        kontekst.saveGState()
+        if pelne {
+            kontekst.addPath(sc)
+            kontekst.setFillColor(CGColor(colorSpace: przestrzen, components: [1, 1, 1, jasnosc])!)
+            kontekst.fillPath()
+            // Pasek tytulu jako przerwa w wypelnieniu — czytelny nawet przy 32 px.
+            let pasek = CGRect(x: r.minX + r.width * 0.10, y: r.maxY - r.height * 0.30,
+                               width: r.width * 0.80, height: r.height * 0.115)
+            kontekst.addPath(CGPath(roundedRect: pasek, cornerWidth: pasek.height / 2, cornerHeight: pasek.height / 2, transform: nil))
+            kontekst.setBlendMode(.clear)
+            kontekst.fillPath()
+            kontekst.setBlendMode(.normal)
+        } else {
+            kontekst.addPath(sc)
+            kontekst.setStrokeColor(CGColor(colorSpace: przestrzen, components: [1, 1, 1, jasnosc])!)
+            kontekst.setLineWidth(max(1, s * 0.018))
+            kontekst.strokePath()
         }
-        CGImageDestinationAddImage(destination, image, nil)
-        if !CGImageDestinationFinalize(destination) { failures += 1 }
+        kontekst.restoreGState()
     }
+
+    okno(odsun * 2, jasnosc: 0.30, pelne: false)
+    okno(odsun, jasnosc: 0.52, pelne: false)
+    okno(0, jasnosc: 0.97, pelne: true)
+
+    return kontekst.makeImage()
 }
 
-if failures > 0 {
-    FileHandle.standardError.write("icongen: nie udało się zapisać \(failures) plików\n".data(using: .utf8)!)
+let argumenty = CommandLine.arguments
+guard argumenty.count > 1 else {
+    FileHandle.standardError.write("Podaj katalog wyjsciowy\n".data(using: .utf8)!)
     exit(1)
 }
+let katalog = URL(fileURLWithPath: argumenty[1])
+try? FileManager.default.createDirectory(at: katalog, withIntermediateDirectories: true)
+
+for (bok, nazwa) in ROZMIARY {
+    guard let obraz = rysuj(bok) else { continue }
+    let plik = katalog.appendingPathComponent("\(nazwa).png")
+    guard let cel = CGImageDestinationCreateWithURL(plik as CFURL, "public.png" as CFString, 1, nil) else { continue }
+    CGImageDestinationAddImage(cel, obraz, nil)
+    CGImageDestinationFinalize(cel)
+}
+print("ikona narysowana: \(ROZMIARY.count) rozmiarow")

@@ -135,7 +135,12 @@ enum BrowserSupport {
 /// zmieni sie tytul okna (czyli po otwarciu, zamknieciu lub przelaczeniu karty).
 /// W trybie "tylko okna" indeks w ogole nie startuje - zero Apple Events.
 final class BrowserTabIndex {
-    private(set) var tabs: [BrowserTab] = []
+    private(set) var tabs: [BrowserTab] = [] {
+        didSet { onZmianaKart?(tabs.count) }
+    }
+    /// Zglaszane po kazdym odczycie kart - okno zgod poznaje po tym, czy zgoda
+    /// „Automatyzacja" naprawde dziala.
+    var onZmianaKart: ((Int) -> Void)?
 
     private let queue = DispatchQueue(label: "pl.klyo.switcher.applescript", qos: .utility)
     private var pendingRefresh: DispatchWorkItem?
