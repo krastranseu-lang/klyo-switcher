@@ -1,13 +1,50 @@
 import AppKit
 import SwiftUI
 
-enum SettingsTab: Hashable {
+enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
     case general
     case schowek
     case browsers
     case screenshots
     case shortcuts
     case updates
+
+    var id: String { rawValue }
+
+    var nazwa: String {
+        switch self {
+        case .general: return "Ogólne"
+        case .schowek: return "Schowek"
+        case .browsers: return "Przeglądarki"
+        case .screenshots: return "Zrzuty ekranu"
+        case .shortcuts: return "Skróty do programów"
+        case .updates: return "Aktualizacje"
+        }
+    }
+
+    var ikona: String {
+        switch self {
+        case .general: return "gearshape"
+        case .schowek: return "doc.on.clipboard"
+        case .browsers: return "safari"
+        case .screenshots: return "camera.viewfinder"
+        case .shortcuts: return "command"
+        case .updates: return "arrow.triangle.2.circlepath"
+        }
+    }
+
+    /// Jedno zdanie, po co tu wchodzic - zeby nie trzeba bylo klikac po kolei
+    /// i sprawdzac, co sie gdzie chowa.
+    var opis: String {
+        switch self {
+        case .general: return "Skrót przełącznika, biurka, wygląd listy, autostart"
+        case .schowek: return "Historia kopiowania i wklejanie bez formatowania"
+        case .browsers: return "Czy pokazywać karty przeglądarek"
+        case .screenshots: return "Zrzut zaznaczonego fragmentu i kompresja"
+        case .shortcuts: return "Własny klawisz do wybranego programu"
+        case .updates: return "Wersja i kanał aktualizacji"
+        }
+    }
 }
 
 /// Zwykle okno aplikacji dla aplikacji, ktora normalnie zyje tylko w pasku menu.
@@ -267,22 +304,85 @@ struct SettingsView: View {
     @ObservedObject var store: SettingsStore
 
     var body: some View {
-        TabView(selection: $store.tab) {
-            general.tabItem { Label("Ogólne", systemImage: "gearshape") }.tag(SettingsTab.general)
-            browsers.tabItem { Label("Przeglądarki", systemImage: "safari") }.tag(SettingsTab.browsers)
-            schowek.tabItem { Label("Schowek", systemImage: "doc.on.clipboard") }.tag(SettingsTab.schowek)
-            screenshots.tabItem { Label("Zrzuty", systemImage: "camera.viewfinder") }.tag(SettingsTab.screenshots)
-            shortcuts.tabItem { Label("Skróty aplikacji", systemImage: "command") }.tag(SettingsTab.shortcuts)
-            updates.tabItem { Label("Aktualizacje", systemImage: "arrow.triangle.2.circlepath") }.tag(SettingsTab.updates)
+        NavigationSplitView {
+            List(SettingsTab.allCases, selection: Binding(
+                get: { store.tab },
+                set: { store.tab = $0 ?? store.tab }
+            )) { sekcja in
+                Label(sekcja.nazwa, systemImage: sekcja.ikona)
+                    .padding(.vertical, 3)
+                    .tag(sekcja)
+            }
+            .navigationSplitViewColumnWidth(min: 196, ideal: 212, max: 240)
+        } detail: {
+            VStack(alignment: .leading, spacing: 0) {
+                naglowek
+                Divider().opacity(0.6)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        zawartosc
+                    }
+                    .padding(22)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
-        .padding(18)
-        .frame(width: 660, height: 540)
+        .frame(width: 800, height: 590)
+    }
+
+    /// Naglowek mowi, gdzie jestes i po co - bez tego okno ustawien jest zbiorem
+    /// przelacznikow, w ktorym trzeba klikac na oslep.
+    private var naglowek: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: store.tab.ikona)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 34, height: 34)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.accentColor.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(store.tab.nazwa).font(.system(size: 15, weight: .semibold))
+                Text(store.tab.opis).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            znacznikGotowosci
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+    }
+
+    /// Jedno spojrzenie zamiast wchodzenia w Ustawienia systemowe: czy program
+    /// w ogole moze dzialac.
+    private var znacznikGotowosci: some View {
+        let gotowy = Permissions.accessibilityGranted
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(gotowy ? Color.green : Color.orange)
+                .frame(width: 7, height: 7)
+            Text(gotowy ? "Gotowy do pracy" : "Czeka na zgodę „Dostępność”")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(Color.primary.opacity(0.05)))
+    }
+
+    @ViewBuilder
+    private var zawartosc: some View {
+        switch store.tab {
+        case .general: general
+        case .schowek: schowek
+        case .browsers: browsers
+        case .screenshots: screenshots
+        case .shortcuts: shortcuts
+        case .updates: updates
+        }
     }
 
     // MARK: Ogolne
 
     private var general: some View {
-        ScrollView {
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 section("Skrót przełącznika okien") {
                     Picker("", selection: $store.modifier) {
@@ -333,14 +433,13 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
     // MARK: Przegladarki
 
     private var browsers: some View {
-        ScrollView {
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 section("Co pokazywać dla Chrome, Safari i pokrewnych") {
                     Picker("", selection: $store.browserMode) {
@@ -376,7 +475,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
@@ -401,7 +499,7 @@ struct SettingsView: View {
     // MARK: Schowek
 
     private var schowek: some View {
-        ScrollView {
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 section("Historia kopiowania") {
                     Toggle("Zapamiętuj to, co kopiujesz", isOn: $store.historiaSchowka)
@@ -448,14 +546,13 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
     // MARK: Zrzuty
 
     private var screenshots: some View {
-        ScrollView {
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 section("Zrzut zaznaczonego fragmentu") {
                     Toggle("Włącz skrót do zrzutu ekranu", isOn: $store.screenshotEnabled)
@@ -518,7 +615,6 @@ struct SettingsView: View {
                     .disabled(!store.screenshotSaveToDisk)
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
@@ -589,7 +685,7 @@ struct SettingsView: View {
     // MARK: Aktualizacje
 
     private var updates: some View {
-        ScrollView {
+        Group {
             VStack(alignment: .leading, spacing: 18) {
                 section("Wersja") {
                     Text("\(AppInfo.name) \(AppInfo.version) (build \(AppInfo.build))")
@@ -613,7 +709,6 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
