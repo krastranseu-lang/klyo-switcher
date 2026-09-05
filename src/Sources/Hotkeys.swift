@@ -55,6 +55,12 @@ final class HotkeyRouter {
     /// `true` = wymuszone zakonczenie (⌥ razem z Q) - dla aplikacji, ktora nie odpowiada.
     var onQuitSelected: ((Bool) -> Void)?
     var onPermissionGranted: (() -> Void)?
+    /// Zgoda widnieje w Ustawieniach, ale system jej NIE honoruje. Tak dzieje sie
+    /// po podmianie programu na wersje z innym podpisem: wpis w Ustawieniach
+    /// zostaje przypisany do starej tozsamosci, a nowy program go nie dziedziczy.
+    /// Bez tego sygnalu program wyglada na zepsuty: ikona jest, zgoda „jest",
+    /// a ⌘ Tab dalej otwiera systemowy przelacznik.
+    var onZgodaNieDziala: (() -> Void)?
     var isSessionActive: () -> Bool = { false }
 
     /// Wstrzymanie na czas nagrywania nowego skrotu w oknie ustawien -
@@ -138,6 +144,9 @@ final class HotkeyRouter {
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
+            // Zgoda jest nadana (sprawdzone wyzej), a mimo to system nie pozwala
+            // podsluchiwac klawiatury. To NIE jest brak zgody - to zgoda martwa.
+            onZgodaNieDziala?()
             startPermissionWatch()
             return
         }

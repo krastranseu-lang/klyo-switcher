@@ -90,19 +90,32 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return true
     }
 
-    /// Autostart potrafi wystartowac druga kopie obok juz dzialajacej - wtedy nowa konczy prace.
+    /// Dwie kopie tego samego programu nie moga chodzic naraz - obie walczylyby
+    /// o ten sam skrot. Ale to STARSZA ma ustapic, nie nowo uruchomiona: uzytkownik
+    /// wlasnie kliknal w ikone i oczekuje, ze cos sie stanie. Wczesniej konczyla
+    /// prace nowa kopia i wygladalo to jak program, ktory sie nie uruchamia.
     private func terminateIfDuplicate() -> Bool {
         guard let bundleID = Bundle.main.bundleIdentifier else { return false }
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let inne = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .filter { $0.processIdentifier != getpid() }
-        guard !others.isEmpty else { return false }
-        NSApp.terminate(nil)
-        return true
+        guard !inne.isEmpty else { return false }
+        for stara in inne {
+            stara.terminate()
+        }
+        // Stara kopia potrzebuje chwili na zwolnienie podsluchu klawiatury.
+        Thread.sleep(forTimeInterval: 0.6)
+        for stara in inne where !stara.isTerminated {
+            stara.forceTerminate()
+        }
+        return false
     }
 
     private func wireExtraShortcuts() {
         switcher.hotkey.onScreenshot = { [weak self] in self?.takeScreenshot() }
         switcher.hotkey.onHistoriaSchowka = { SchowekOknoController.shared.pokaz() }
+        switcher.hotkey.onZgodaNieDziala = {
+            OknoUprawnienController.shared.pokaz(zgodaMartwa: true)
+        }
         switcher.hotkey.onCzystyTekst = {
             if !Wklejanie.wklejBezFormatowania() {
                 ToastPresenter.shared.show("W schowku nie ma tekstu do wklejenia.", symbol: "text.badge.xmark")

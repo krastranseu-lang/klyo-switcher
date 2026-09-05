@@ -78,6 +78,7 @@ enum HistoriaKartPrzegladarki {
 
 final class ModelUprawnien: ObservableObject {
     @Published private(set) var stan: [RodzajZgody: Bool] = [:]
+    @Published var zgodaMartwa: Bool = false
     private var zegar: Timer?
 
     init() {
@@ -123,7 +124,11 @@ final class OknoUprawnienController: NSObject, NSWindowDelegate {
 
     private override init() { super.init() }
 
-    func pokaz() {
+    /// `zgodaMartwa` znaczy: w Ustawieniach jest ptaszek, ale system i tak nie
+    /// wpuszcza programu. Trzeba wtedy powiedziec cos zupelnie innego niz
+    /// „wlacz zgode", bo uzytkownik ma ja WLACZONA i slusznie sie zloszczy.
+    func pokaz(zgodaMartwa: Bool = false) {
+        model.zgodaMartwa = zgodaMartwa
         model.start()
         if okno == nil {
             let widok = NSHostingView(rootView: WidokUprawnien(model: model, zamknij: { [weak self] in self?.schowaj() }))
@@ -171,6 +176,9 @@ struct WidokUprawnien: View {
             Divider().opacity(0.5)
             ScrollView {
                 VStack(spacing: 10) {
+                    if model.zgodaMartwa {
+                        zgodaMartwaPasek
+                    }
                     ForEach(RodzajZgody.allCases) { zgoda in
                         wiersz(zgoda)
                     }
@@ -182,6 +190,41 @@ struct WidokUprawnien: View {
             stopka
         }
         .frame(minWidth: 520, minHeight: 560)
+    }
+
+    /// Osobny komunikat na wypadek, gdy w Ustawieniach jest ptaszek, a program
+    /// i tak nie dziala. To najczesciej zdarza sie po aktualizacji, ktora zmienila
+    /// podpis programu: zgoda zostaje przypisana do STAREJ tozsamosci.
+    private var zgodaMartwaPasek: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.orange)
+                Text("Zgoda jest zaznaczona, ale system jej nie honoruje")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            Text("Tak dzieje się po podmianie programu na wersję z innym podpisem: macOS przypisuje zgodę do konkretnej kopii programu, a nowa jej nie dziedziczy. Ptaszek w Ustawieniach zostaje po starej. Trzeba go usunąć i dodać na nowo — zajmuje to kilkanaście sekund.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                krok(1, "Otwórz Dostępność przyciskiem poniżej.")
+                krok(2, "Zaznacz na liście „\(AppInfo.name)” i kliknij minus, żeby usunąć wpis.")
+                krok(3, "Kliknij plus, wskaż program w katalogu Programy i włącz przełącznik.")
+            }
+            Button {
+                RodzajZgody.dostepnosc.otworzUstawienia()
+            } label: {
+                Label("Otwórz: Prywatność i ochrona → Dostępność", systemImage: "arrow.up.forward.app")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.orange)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.orange.opacity(0.09)))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1))
     }
 
     private var naglowek: some View {
