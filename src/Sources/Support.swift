@@ -79,6 +79,46 @@ let cgWindowListCreateImageFunction: (@convention(c) (CGRect, CGWindowListOption
 }()
 
 enum Permissions {
+    /// Czy zgoda Dostepnosci kiedykolwiek dzialala na tym komputerze.
+    ///
+    /// Sluzy do rozpoznania sytuacji, ktora doprowadza uzytkownikow do rozpaczy:
+    /// w Ustawieniach ptaszek JEST, a program nie dziala. Sam brak zgody wyglada
+    /// tak samo jak zgoda przypisana do starej kopii programu - roznica jest
+    /// tylko w historii. Jesli zgoda kiedys dzialala, a teraz nie, to prawie na
+    /// pewno wpis w systemie zostal po poprzedniej kopii i trzeba go odswiezyc,
+    /// a nie „wlaczyc jeszcze raz" (to ostatnie nie pomaga i tylko frustruje).
+    static var zgodaKiedysDzialala: Bool {
+        get { UserDefaults.standard.bool(forKey: "zgodaKiedysDzialala") }
+        set { UserDefaults.standard.set(newValue, forKey: "zgodaKiedysDzialala") }
+    }
+
+    /// Zgoda zaznaczona, a program i tak bez dostepu.
+    static var zgodaMartwa: Bool {
+        !accessibilityGranted && zgodaKiedysDzialala
+    }
+
+    /// Usuwa systemowy wpis zgody dla TEGO programu, zeby macOS zapytal o nia
+    /// od nowa i zwiazal ja z aktualna kopia.
+    ///
+    /// Alternatywa jest kazanie czlowiekowi odszukac program na liscie, kliknac
+    /// minus, potem plus i wskazac plik - czyli kilkanascie klikniec w miejscu,
+    /// ktorego wiekszosc ludzi nie zna. `tccutil` robi dokladnie to samo jednym
+    /// ruchem i nie wymaga hasla administratora, bo dotyczy wylacznie nas.
+    @discardableResult
+    static func naprawZgode() -> Bool {
+        guard let identyfikator = Bundle.main.bundleIdentifier else { return false }
+        let proces = Process()
+        proces.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        proces.arguments = ["reset", "Accessibility", identyfikator]
+        proces.standardOutput = FileHandle.nullDevice
+        proces.standardError = FileHandle.nullDevice
+        guard (try? proces.run()) != nil else { return false }
+        proces.waitUntilExit()
+        guard proces.terminationStatus == 0 else { return false }
+        zgodaKiedysDzialala = false
+        return true
+    }
+
     static var accessibilityGranted: Bool {
         AXIsProcessTrusted()
     }
