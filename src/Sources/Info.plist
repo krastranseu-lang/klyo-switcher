@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>pl</string>
+	<key>CFBundleExecutable</key>
+	<string>KlyoSwitcher</string>
+	<key>CFBundleIdentifier</key>
+	<string>pl.klyo.switcher</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Klyo Switcher</string>
+	<key>CFBundleDisplayName</key>
+	<string>Klyo Switcher</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.3.1</string>
+	<key>CFBundleVersion</key>
+	<string>5</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Klyo Switcher odczytuje tytuły otwartych kart w przeglądarkach, aby pokazać je na liście przełączania okien.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Klyo Switcher potrzebuje dostępu do Accessibility API, aby wypisać otwarte okna i przełączyć się na wybrane.</string>
+</dict>
+</plist>
