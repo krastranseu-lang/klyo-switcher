@@ -41,6 +41,10 @@ enum HUDLayout {
 }
 
 final class SwitcherModel: ObservableObject {
+    /// Pelna lista okien z tej sesji. `items` to jej przefiltrowany widok, wiec
+    /// skasowanie frazy przywraca wszystko bez ponownego zbierania okien.
+    private var wszystkie: [SwitcherItem] = []
+    @Published private(set) var fraza: String = ""
     @Published var items: [SwitcherItem] = []
     @Published var selection: Int = 0
     @Published var columns: Int = 1
@@ -71,6 +75,49 @@ final class SwitcherModel: ObservableObject {
     var selectedItem: SwitcherItem? {
         items.indices.contains(selection) ? items[selection] : nil
     }
+
+    // MARK: - Szukanie po nazwie
+
+    /// Podstawia pelna liste okien i zeruje szukana fraze.
+    func ustawWszystkie(_ lista: [SwitcherItem]) {
+        wszystkie = lista
+        fraza = ""
+        items = lista
+    }
+
+    func dopiszDoFrazy(_ znak: String) {
+        zmienFraze(fraza + znak)
+    }
+
+    func skasujZnakFrazy() {
+        guard !fraza.isEmpty else { return }
+        zmienFraze(String(fraza.dropLast()))
+    }
+
+    /// Filtr dziala na tytule okna I nazwie programu, bez ogladania sie na wielkosc
+    /// liter oraz na ogonki - „zlec" znajdzie „Zlecenia", a „lodz" znajdzie „Łódź".
+    private func zmienFraze(_ nowa: String) {
+        fraza = nowa
+        let szukane = SwitcherModel.uprosc(nowa)
+        if szukane.isEmpty {
+            items = wszystkie
+        } else {
+            items = wszystkie.filter {
+                SwitcherModel.uprosc($0.title).contains(szukane)
+                    || SwitcherModel.uprosc($0.subtitle).contains(szukane)
+            }
+        }
+        selection = items.isEmpty ? 0 : min(selection, items.count - 1)
+        hoveredID = nil
+    }
+
+    static func uprosc(_ tekst: String) -> String {
+        tekst.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL"))
+    }
+
+    /// Ile okien odpadlo przez fraze - stopka mowi o tym wprost, zeby nikt nie
+    /// pomyslal, ze polowa okien zniknela z systemu.
+    var odfiltrowane: Int { max(0, wszystkie.count - items.count) }
 
     func index(of id: String) -> Int? {
         items.firstIndex { $0.id == id }
@@ -199,7 +246,8 @@ struct SwitcherView: View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(model.selectedItem?.title ?? "Brak otwartych okien")
+                    Text(model.selectedItem?.title
+                         ?? (model.fraza.isEmpty ? "Brak otwartych okien" : "Nic nie pasuje do „\(model.fraza)”"))
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -217,6 +265,24 @@ struct SwitcherView: View {
                 hints
             }
             Spacer(minLength: 8)
+            if !model.fraza.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 9.5, weight: .semibold))
+                    Text(model.fraza)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .lineLimit(1)
+                    if model.odfiltrowane > 0 {
+                        Text("−\(model.odfiltrowane)")
+                            .font(.system(size: 9.5).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                .fixedSize()
+            }
             if !model.items.isEmpty {
                 Text("\(model.selection + 1) / \(model.items.count)")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
@@ -237,6 +303,7 @@ struct SwitcherView: View {
             hint("⇧", "wstecz")
             hint("←→↑↓", "wybór")
             hint("\(symbol)1–9", "skok")
+            hint("pisz", "szukaj")
             hint("\(symbol)W", "zamknij okno")
             hint("\(symbol)Q", "zakończ aplikację")
             hint("esc", "anuluj")

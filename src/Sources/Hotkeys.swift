@@ -30,6 +30,7 @@ final class HotkeyRouter {
         static let backtick: Int64 = 50
         static let w: Int64 = 13
         static let q: Int64 = 12
+        static let backspace: Int64 = 51
     }
 
     /// Klawisze 1…9 w gornym rzedzie - skok do pozycji na liscie.
@@ -37,6 +38,10 @@ final class HotkeyRouter {
         18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9
     ]
 
+    /// Litera dopisana do szukanej frazy podczas otwartej listy.
+    var onSzukaj: ((String) -> Void)?
+    /// Skasowanie ostatniego znaku frazy (klawisz cofania).
+    var onKasujZnak: (() -> Void)?
     var onCycle: ((Bool) -> Void)?
     var onArrow: ((ArrowDirection) -> Void)?
     var onSelectIndex: ((Int) -> Void)?
@@ -231,9 +236,21 @@ final class HotkeyRouter {
                     guard flags.contains(switcherModifier) else { return Unmanaged.passUnretained(event) }
                     onQuitSelected?(flags.contains(.maskAlternate))
                     return nil
+                case Key.backspace:
+                    onKasujZnak?()
+                    return nil
                 default:
                     if flags.contains(switcherModifier), let digit = HotkeyRouter.digitKeys[keyCode] {
                         onSelectIndex?(digit - 1)
+                        return nil
+                    }
+                    // Wszystko inne, co ma czytelny znak, dopisuje sie do szukanej frazy.
+                    // Uzytkownik trzyma modyfikator, wiec system i tak nie dostalby tych
+                    // klawiszy do niczego pozytecznego, a pisanie jest najszybszym sposobem
+                    // znalezienia jednego okna wsrod trzydziestu.
+                    if !flags.contains(.maskControl),
+                       let znak = event.znakBezModyfikatorow(), !znak.isEmpty {
+                        onSzukaj?(znak)
                         return nil
                     }
                     return Unmanaged.passUnretained(event)
@@ -283,5 +300,23 @@ final class HotkeyRouter {
             }
             return Unmanaged.passUnretained(event)
         }
+    }
+}
+
+extension CGEvent {
+    /// Znak, ktory ten klawisz dalby BEZ wcisnietych modyfikatorow. Dzieki temu
+    /// „⌘ + S" podczas otwartej listy dopisuje do frazy litere „s", a nie znak
+    /// sterujacy, i dziala tak samo na kazdym ukladzie klawiatury.
+    func znakBezModyfikatorow() -> String? {
+        var dlugosc = 0
+        var bufor = [UniChar](repeating: 0, count: 4)
+        let kopia = self.copy()
+        kopia?.flags = []
+        kopia?.keyboardGetUnicodeString(maxStringLength: 4, actualStringLength: &dlugosc, unicodeString: &bufor)
+        guard dlugosc > 0 else { return nil }
+        let tekst = String(utf16CodeUnits: bufor, count: dlugosc)
+        // Znaki sterujace (esc, enter, tabulator) maja wlasna obsluge wyzej.
+        guard let pierwszy = tekst.unicodeScalars.first, pierwszy.value >= 32, pierwszy.value != 127 else { return nil }
+        return tekst
     }
 }

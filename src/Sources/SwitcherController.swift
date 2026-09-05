@@ -76,6 +76,18 @@ final class SwitcherController {
         hotkey.onCycle = { [weak self] forward in self?.cycle(forward: forward) }
         hotkey.onArrow = { [weak self] direction in self?.move(direction) }
         hotkey.onSelectIndex = { [weak self] index in self?.select(index) }
+        hotkey.onSzukaj = { [weak self] znak in
+            guard let self, self.sessionActive else { return }
+            self.model.dopiszDoFrazy(znak)
+            self.przeliczRozmiar()
+            self.startWatchdog()
+        }
+        hotkey.onKasujZnak = { [weak self] in
+            guard let self, self.sessionActive else { return }
+            self.model.skasujZnakFrazy()
+            self.przeliczRozmiar()
+            self.startWatchdog()
+        }
         hotkey.onCommit = { [weak self] in self?.commit() }
         hotkey.onCancel = { [weak self] in self?.cancel() }
         hotkey.onCloseSelected = { [weak self] in
@@ -204,7 +216,7 @@ final class SwitcherController {
         idleCleanup?.invalidate()
         idleCleanup = nil
         generation &+= 1
-        model.items = items
+        model.ustawWszystkie(items)
         model.columns = columns
         model.selection = selection
         model.resetPointer(origin: NSEvent.mouseLocation)
@@ -213,6 +225,28 @@ final class SwitcherController {
         sessionActive = true
         startWatchdog()
         captureThumbnails(for: generation)
+    }
+
+    /// Po zmianie frazy lista ma inna dlugosc, wiec okno HUD-a musi sie przeliczyc -
+    /// inaczej zostaje puste miejsce albo karty wychodza poza ramke.
+    private func przeliczRozmiar() {
+        guard sessionActive, let panel else { return }
+        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let liczba = max(1, model.items.count)
+        let kolumny = HUDLayout.columns(for: liczba, screenWidth: screen.frame.width)
+        model.columns = kolumny
+        let size = HUDLayout.panelSize(count: liczba, columns: kolumny)
+        let visible = screen.visibleFrame
+        panel.setFrame(
+            NSRect(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
+                   width: size.width, height: size.height),
+            display: true
+        )
+    }
+
+    private func odswiezPoZmianieFrazy() {
+        przeliczRozmiar()
+        startWatchdog()
     }
 
     private func advance(by delta: Int) {
@@ -255,6 +289,13 @@ final class SwitcherController {
             return
         }
         guard sessionActive else { return }
+        // Pomylka w pisaniu nie moze kosztowac calej sesji: pierwszy Esc kasuje fraze,
+        // dopiero drugi zamyka liste.
+        if !model.fraza.isEmpty {
+            model.ustawWszystkie(model.items.isEmpty ? [] : model.items)
+            odswiezPoZmianieFrazy()
+            return
+        }
         hide()
         browsers.refresh(after: 0.7)
     }
