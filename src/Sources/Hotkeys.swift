@@ -48,6 +48,7 @@ final class HotkeyRouter {
     var onCommit: (() -> Void)?
     var onCancel: (() -> Void)?
     var onScreenshot: (() -> Void)?
+    var onHistoriaSchowka: (() -> Void)?
     var onAppShortcut: ((AppShortcut) -> Void)?
     var onCloseSelected: (() -> Void)?
     /// `true` = wymuszone zakonczenie (⌥ razem z Q) - dla aplikacji, ktora nie odpowiada.
@@ -67,6 +68,8 @@ final class HotkeyRouter {
     private var switcherModifier: CGEventFlags = Settings.modifier.eventFlag
     private var screenshotCombo: KeyCombo = .unset
     private var screenshotEnabled = false
+    private var schowekCombo: KeyCombo = .unset
+    private var schowekEnabled = false
     private var appShortcuts: [AppShortcut] = []
 
     init() {
@@ -93,6 +96,8 @@ final class HotkeyRouter {
         switcherModifier = Settings.modifier.eventFlag
         screenshotCombo = Settings.screenshotCombo
         screenshotEnabled = Settings.screenshotEnabled
+        schowekCombo = Settings.skrotHistoriiSchowka
+        schowekEnabled = Settings.historiaSchowkaWlaczona
         appShortcuts = Settings.appShortcuts.filter { $0.combo.isSet }
     }
 
@@ -268,6 +273,11 @@ final class HotkeyRouter {
 
             if screenshotEnabled, screenshotCombo.matches(keyCode: keyCode, flags: flags) {
                 onScreenshot?()
+                return nil
+            }
+
+            if schowekEnabled, schowekCombo.matches(keyCode: keyCode, flags: flags) {
+                onHistoriaSchowka?()
                 return nil
             }
 

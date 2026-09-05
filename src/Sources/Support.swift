@@ -279,6 +279,9 @@ enum Settings {
         static let screenshotSaveToDisk = "screenshotSaveToDisk"
         static let screenshotFolder = "screenshotFolder"
         static let appShortcuts = "appShortcuts"
+        static let historiaSchowka = "historiaSchowkaWlaczona"
+        static let limitHistorii = "limitHistoriiSchowka"
+        static let skrotSchowka = "skrotHistoriiSchowka"
         static let updateFeed = "updateFeedURL"
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -299,6 +302,8 @@ enum Settings {
             Key.screenshotFormat: ScreenshotFormat.jpeg.rawValue,
             Key.screenshotSaveToDisk: true,
             Key.autoCheckUpdates: true,
+            Key.historiaSchowka: true,
+            Key.limitHistorii: 200,
             Key.updateFeed: "https://klyo.pl/klyo-switcher/appcast.json"
         ])
     }
@@ -389,6 +394,34 @@ enum Settings {
             return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
         }
         set { defaults.set(newValue.path, forKey: Key.screenshotFolder) }
+    }
+
+    static var historiaSchowkaWlaczona: Bool {
+        get { defaults.bool(forKey: Key.historiaSchowka) }
+        set { defaults.set(newValue, forKey: Key.historiaSchowka) }
+    }
+
+    static var limitHistoriiSchowka: Int {
+        get { max(20, defaults.integer(forKey: Key.limitHistorii)) }
+        set { defaults.set(max(20, newValue), forKey: Key.limitHistorii) }
+    }
+
+    /// Domyslnie ⌘⇧V - obok systemowego wklejania, wiec latwo zapamietac.
+    static var skrotHistoriiSchowka: KeyCombo {
+        get {
+            guard let data = defaults.data(forKey: Key.skrotSchowka),
+                  let combo = try? PropertyListDecoder().decode(KeyCombo.self, from: data) else {
+                return KeyCombo(
+                    keyCode: 9,
+                    modifiers: CGEventFlags.maskCommand.rawValue | CGEventFlags.maskShift.rawValue
+                )
+            }
+            return combo
+        }
+        set {
+            guard let data = try? PropertyListEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.skrotSchowka)
+        }
     }
 
     static var appShortcuts: [AppShortcut] {

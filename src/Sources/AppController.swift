@@ -10,6 +10,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         buildStatusItem()
         switcher.start()
+        HistoriaSchowka.shared.start()
         wireExtraShortcuts()
         Updater.shared.startAutomaticChecks()
 
@@ -99,6 +100,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func wireExtraShortcuts() {
         switcher.hotkey.onScreenshot = { [weak self] in self?.takeScreenshot() }
+        switcher.hotkey.onHistoriaSchowka = { SchowekOknoController.shared.pokaz() }
         switcher.hotkey.onAppShortcut = { shortcut in AppLauncher.trigger(shortcut) }
         HotkeySuspension.setter = { [weak router = self.switcher.hotkey] suspended in
             router?.isSuspended = suspended
@@ -167,6 +169,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         spacesItem.submenu = spacesMenu
         menu.addItem(spacesItem)
 
+        if Settings.historiaSchowkaWlaczona {
+            let historia = NSMenuItem(
+                title: "Historia kopiowania  (\(Settings.skrotHistoriiSchowka.display))",
+                action: #selector(pokazHistorieSchowka),
+                keyEquivalent: ""
+            )
+            historia.target = self
+            menu.addItem(historia)
+        }
+
         if Settings.screenshotEnabled {
             let shot = NSMenuItem(
                 title: "Zrzut ekranu z kompresją  (\(Settings.screenshotCombo.display))",
@@ -224,6 +236,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openAccessibility() {
         Permissions.openAccessibilitySettings()
+    }
+
+    @objc private func pokazHistorieSchowka() {
+        SchowekOknoController.shared.pokaz()
     }
 
     @objc private func takeScreenshotFromMenu() {

@@ -3,6 +3,7 @@ import SwiftUI
 
 enum SettingsTab: Hashable {
     case general
+    case schowek
     case browsers
     case screenshots
     case shortcuts
@@ -84,6 +85,15 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var historiaSchowka: Bool = true {
+        didSet {
+            Settings.historiaSchowkaWlaczona = historiaSchowka
+            SettingsBus.announce()
+        }
+    }
+    @Published var limitHistorii: Int = 200 { didSet { commit { Settings.limitHistoriiSchowka = limitHistorii } } }
+    @Published var skrotSchowka: KeyCombo = .unset { didSet { commit { Settings.skrotHistoriiSchowka = skrotSchowka } } }
+
     @Published var screenshotEnabled: Bool = true { didSet { commit { Settings.screenshotEnabled = screenshotEnabled } } }
     @Published var screenshotCombo: KeyCombo = .unset { didSet { commit { Settings.screenshotCombo = screenshotCombo } } }
     @Published var screenshotMaxKB: Int = 1200 { didSet { commit { Settings.screenshotMaxKB = screenshotMaxKB } } }
@@ -107,6 +117,9 @@ final class SettingsStore: ObservableObject {
         spacesMode = Settings.spacesMode
         tabLimit = Settings.tabLimitPerWindow
         thumbnails = Settings.showThumbnails
+        historiaSchowka = Settings.historiaSchowkaWlaczona
+        limitHistorii = Settings.limitHistoriiSchowka
+        skrotSchowka = Settings.skrotHistoriiSchowka
         screenshotEnabled = Settings.screenshotEnabled
         screenshotCombo = Settings.screenshotCombo
         screenshotMaxKB = Settings.screenshotMaxKB
@@ -255,6 +268,7 @@ struct SettingsView: View {
         TabView(selection: $store.tab) {
             general.tabItem { Label("Ogólne", systemImage: "gearshape") }.tag(SettingsTab.general)
             browsers.tabItem { Label("Przeglądarki", systemImage: "safari") }.tag(SettingsTab.browsers)
+            schowek.tabItem { Label("Schowek", systemImage: "doc.on.clipboard") }.tag(SettingsTab.schowek)
             screenshots.tabItem { Label("Zrzuty", systemImage: "camera.viewfinder") }.tag(SettingsTab.screenshots)
             shortcuts.tabItem { Label("Skróty aplikacji", systemImage: "command") }.tag(SettingsTab.shortcuts)
             updates.tabItem { Label("Aktualizacje", systemImage: "arrow.triangle.2.circlepath") }.tag(SettingsTab.updates)
@@ -379,6 +393,49 @@ struct SettingsView: View {
             return "Każda karta osobno. Przy kilkudziesięciu kartach lista robi się bardzo długa."
         case .recentTabs:
             return "Każde okno pokazuje aktywną kartę i kilka ostatnio używanych — kompromis między jednym a wszystkim."
+        }
+    }
+
+    // MARK: Schowek
+
+    private var schowek: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                section("Historia kopiowania") {
+                    Toggle("Zapamiętuj to, co kopiujesz", isOn: $store.historiaSchowka)
+                    HStack {
+                        Text("Skrót do historii")
+                        KeyRecorder(combo: store.skrotSchowka) { store.skrotSchowka = $0 }
+                    }
+                    .disabled(!store.historiaSchowka)
+                    Text("Otwiera listę skopiowanych rzeczy: pisz, żeby szukać, strzałki wybierają, Enter wkleja tam, gdzie właśnie piszesz. Obrazy i zrzuty ekranu pokazują się miniaturą.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Ile pamiętać") {
+                    Stepper(value: $store.limitHistorii, in: 20...1000, step: 20) {
+                        Text("Najwyżej \(store.limitHistorii) wpisów")
+                    }
+                    .disabled(!store.historiaSchowka)
+                    Text("Przypięte wpisy zostają zawsze, niezależnie od tego limitu — od tego są przypięte. Historia leży wyłącznie na tym komputerze i nigdzie nie jest wysyłana.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Czego program nie zapisuje") {
+                    Text("Treści oznaczonej przez inny program jako poufna — tak robią menedżery haseł. Hasło skopiowane z takiego programu nie trafia do historii ani na dysk.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Wyczyść historię teraz") {
+                        HistoriaSchowka.shared.wyczysc()
+                    }
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 
