@@ -55,9 +55,14 @@ enum RodzajZgody: String, CaseIterable, Identifiable {
         case .dostepnosc: return Permissions.accessibilityGranted
         case .nagrywanie: return Permissions.screenRecordingGranted
         case .automatyzacja:
-            // Systemu nie da sie o to zapytac wprost. Sprawdzamy skutek: jesli
-            // program ma odczytane karty przegladarki, zgoda jest nadana.
-            return !HistoriaKartPrzegladarki.brakKart
+            // Pytamy SYSTEM, zamiast wnioskować ze skutku.
+            //
+            // Wcześniej sprawdzaliśmy, czy udało się odczytać karty przeglądarki —
+            // a brak kart znaczy najczęściej tyle, że przeglądarka jest zamknięta
+            // albo działa tryb „tylko okna". Program pokazywał wtedy „wyłączona"
+            // przy zgodzie, którą człowiek miał WŁĄCZONĄ w Ustawieniach.
+            // Skutek nigdy nie zastąpi pytania o stan.
+            return Permissions.automatyzacjaNadanaDlaJakiejsPrzegladarki
         }
     }
 
