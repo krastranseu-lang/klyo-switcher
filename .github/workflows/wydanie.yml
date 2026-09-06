@@ -61,6 +61,15 @@ jobs:
           ./build/icongen build/AppIcon.iconset
           iconutil -c icns build/AppIcon.iconset -o "build/Klyo Switcher.app/Contents/Resources/AppIcon.icns"
 
+      # Ikonę trzeba ZOBACZYĆ przed wydaniem. Rysowana kodem wygląda w wyobraźni
+      # inaczej niż na ekranie, a w Docku ląduje na lata.
+      - name: Wystaw ikonę do obejrzenia
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: podglad-ikony
+          path: build/AppIcon.iconset/*.png
+
       - name: Wpuść certyfikat do pęku kluczy tej maszyny
         if: env.MAMY_PODPIS == 'true'
         env:
