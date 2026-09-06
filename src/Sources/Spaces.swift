@@ -394,3 +394,63 @@ enum SkrotBiurka {
         }
     }
 }
+
+// MARK: - Dziennik: FAKTY zamiast domyslow
+
+/// Zapisuje, co naprawde dzieje sie przy przeskoku miedzy biurkami.
+///
+/// Powstal, bo szukanie przyczyny „nie przelacza biurka" opieralo sie na
+/// domyslach: nie da sie zobaczyc z zewnatrz, czy prywatne funkcje systemu w ogole
+/// odpowiadaja, jakie biurko system przypisuje oknu i czy przejscie nastapilo.
+/// Kazda z tych rzeczy moze zawiesc osobno, a objaw jest ten sam.
+///
+/// Dziennik trzyma ostatnie 200 wpisow w pamieci i oddaje je na zadanie -
+/// nic nie zapisujemy na dysk i nic nie wychodzi z komputera.
+enum DziennikBiurek {
+    private static let kolejka = DispatchQueue(label: "klyo.dziennik-biurek")
+    private static var wpisy: [String] = []
+    private static let limit = 200
+
+    static func zapisz(_ tekst: String) {
+        kolejka.async {
+            let czas = Self.znacznik()
+            wpisy.append("\(czas)  \(tekst)")
+            if wpisy.count > limit { wpisy.removeFirst(wpisy.count - limit) }
+        }
+    }
+
+    static func tresc() -> String {
+        kolejka.sync {
+            let naglowek = """
+            Klyo Switcher \(AppInfo.version) (build \(AppInfo.build))
+            macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
+
+            Dostep do biurek (SkyLight):
+              odczyt biurek:        \(SkyLight.canReadSpaces ? "TAK" : "NIE - to jest przyczyna")
+              przenoszenie okien:   \(SkyLight.canBringWindows ? "TAK" : "NIE - to jest przyczyna")
+              polaczenie z systemem: \(SkyLight.connection.map(String.init) ?? "BRAK")
+              przywracanie biurka:  \(SkyLight.spaceSetFrontPSN != nil ? "TAK" : "NIE")
+
+            Przelaczanie biurek w systemie: \(PrzelaczanieBiurek.wlaczone ? "wlaczone" : "WYLACZONE")
+
+            Ostatnie zdarzenia:
+            """
+            return ([naglowek] + wpisy).joined(separator: "\n")
+        }
+    }
+
+    /// Zdjecie stanu biurek w tej chwili - do wpisu w dzienniku.
+    static func stanBiurek() -> String {
+        let mapa = Spaces.map()
+        guard mapa.isAvailable else { return "mapa biurek NIEDOSTEPNA (SkyLight nie odpowiada)" }
+        let biezace = mapa.current.map(String.init).sorted().joined(separator: ", ")
+        let numery = mapa.desktopNumbers.map { "\($0.key)=biurko \($0.value)" }.sorted().joined(separator: ", ")
+        return "biezace: [\(biezace)] · znane biurka: [\(numery)] · pelnoekranowe: \(mapa.fullscreen.count)"
+    }
+
+    private static func znacznik() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f.string(from: Date())
+    }
+}
