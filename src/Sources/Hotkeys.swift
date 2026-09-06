@@ -33,6 +33,7 @@ final class HotkeyRouter {
         static let backspace: Int64 = 51
         static let v: Int64 = 9
         static let d: Int64 = 2
+        static let m: Int64 = 46
     }
 
     /// Klawisze 1…9 w gornym rzedzie - skok do pozycji na liscie.
@@ -60,6 +61,8 @@ final class HotkeyRouter {
     var onAppShortcut: ((AppShortcut) -> Void)?
     /// ⌘D na otwartej liscie - przypiecie programu do ulubionych albo cofniecie.
     var onPrzypnijUlubione: (() -> Void)?
+    /// ⌘M na otwartej liscie - wyciszenie programu wybranej karty.
+    var onWyciszenie: (() -> Void)?
     var onCloseSelected: (() -> Void)?
     /// `true` = wymuszone zakonczenie (⌥ razem z Q) - dla aplikacji, ktora nie odpowiada.
     var onQuitSelected: ((Bool) -> Void)?
@@ -286,6 +289,10 @@ final class HotkeyRouter {
                 case Key.d:
                     guard flags.contains(switcherModifier) else { return Unmanaged.passUnretained(event) }
                     onPrzypnijUlubione?()
+                    return nil
+                case Key.m:
+                    guard flags.contains(switcherModifier) else { return Unmanaged.passUnretained(event) }
+                    onWyciszenie?()
                     return nil
                 case Key.backspace:
                     onKasujZnak?()

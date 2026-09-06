@@ -67,6 +67,9 @@ final class SwitcherController {
         model.onPrzypnij = { [weak self] index in
             self?.przelaczUlubione(at: index)
         }
+        model.onWyciszenie = { [weak self] index in
+            self?.przelaczWyciszenie(at: index)
+        }
 
         // Sesja "trwa" takze w oknie miedzy zamowieniem listy a jej pokazaniem - inaczej
         // puszczenie modyfikatora przy szybkim ⌘⇥ trafialoby w prozni i HUD zostawalby otwarty.
@@ -91,6 +94,9 @@ final class SwitcherController {
         }
         hotkey.onCommit = { [weak self] in self?.commit() }
         hotkey.onCancel = { [weak self] in self?.cancel() }
+        hotkey.onWyciszenie = { [weak self] in
+            self?.przelaczWyciszenie(at: self?.model.selection ?? 0)
+        }
         hotkey.onPrzypnijUlubione = { [weak self] in
             self?.przelaczUlubione(at: self?.model.selection ?? 0)
         }
@@ -178,6 +184,19 @@ final class SwitcherController {
         ToastPresenter.shared.show(
             przypiety ? "\(pozycja.subtitle) w ulubionych" : "\(pozycja.subtitle) już nie w ulubionych",
             symbol: przypiety ? "star.fill" : "star.slash"
+        )
+    }
+
+    /// Wyciszenie programu wybranej karty (albo przywrocenie mu dzwieku).
+    private func przelaczWyciszenie(at index: Int) {
+        guard sessionActive, model.items.indices.contains(index) else { return }
+        let pozycja = model.items[index]
+        GlosnoscAplikacji.posprzatajPoZamknietych()
+        let wyciszony = GlosnoscAplikacji.przelaczWyciszenie(pid: pozycja.pid)
+        model.odswiezUlubione()   // przerysowanie kart - znak przy glosniku sie zmienil
+        ToastPresenter.shared.show(
+            wyciszony ? "\(pozycja.subtitle) wyciszony" : "\(pozycja.subtitle) znów gra",
+            symbol: wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill"
         )
     }
 

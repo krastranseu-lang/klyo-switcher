@@ -588,6 +588,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             : "\(AppInfo.name) \(AppInfo.version)"
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Zadne wyciszenie nie ma prawa przezyc programu - inaczej czyjs dzwiek
+        // zostalby wyciszony na zawsze, a czlowiek nie mialby jak tego odkrecic.
+        GlosnoscAplikacji.przywrocWszystkie()
+    }
+
     @objc private func pokazSzybkieAkcje() {
         SzybkieAkcjeController.shared.zbierzOkna = { [weak self] in
             guard let self else { return [] }

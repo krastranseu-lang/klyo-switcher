@@ -89,6 +89,7 @@ final class SwitcherModel: ObservableObject {
     var onClose: ((Int) -> Void)?
     var onQuit: ((Int) -> Void)?
     var onPrzypnij: ((Int) -> Void)?
+    var onWyciszenie: ((Int) -> Void)?
     /// Licznik przerysowania po zmianie ulubionych - `Ulubione` trzyma stan poza
     /// modelem, wiec SwiftUI nie ma jak sam zauwazyc, ze gwiazdka sie przeniosla.
     @Published var wersjaUlubionych = 0
@@ -332,6 +333,12 @@ struct SwitcherView: View {
                     // Te same akcje, co na malej karcie. Bez nich powiekszenie
                     // zabieralo mozliwosc kliknięcia w gwiazdke albo krzyzyk -
                     // panel zaslanial karte, a swoich przyciskow nie mial.
+                    przyciskPodgladu(GlosnoscAplikacji.czyWyciszony(pid: pozycja.pid)
+                                     ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                                     pozycja: pozycja,
+                                     podpowiedz: "Wycisz / przywróć dźwięk (⌘M)") { index in
+                        model.onWyciszenie?(index)
+                    }
                     przyciskPodgladu("star", pozycja: pozycja, podpowiedz: "Ulubione (⌘D)") { index in
                         model.onPrzypnij?(index)
                     }
@@ -455,6 +462,7 @@ struct SwitcherView: View {
             hint("pisz", "szukaj")
             hint("⌘⇧V", "schowek")
             hint("\(symbol)D", "ulubione")
+            hint("\(symbol)M", "wycisz")
             hint("\(symbol)W", "zamknij okno")
             hint("\(symbol)Q", "zakończ aplikację")
             hint("esc", "anuluj")
@@ -727,16 +735,30 @@ struct SwitcherView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
-            // Glosnik: ten program wlasnie gra. Odpowiedz na „skad ten dzwiek"
-            // bez szukania po kolei w kazdym oknie.
-            if Dzwiek.gra(pid: item.pid) {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .padding(4)
-                    .background(Circle().fill(Color.accentColor.opacity(0.92)))
-                    .padding(4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Glosnik: ta karta gra. Dwa zrodla pewnosci, w tej kolejnosci:
+            //   1. tytul z glosnikiem - przegladarka sama wskazuje KARTE,
+            //   2. CoreAudio - mowi tylko, ze gra PROGRAM, wiec znak dostaje
+            //      pierwsza karta tego programu; inaczej glosnik zapalalby sie
+            //      na wszystkich pietnastu oknach Chrome naraz i nie mowil nic.
+            if Dzwiek.tytulMowiOGraniu(item.title)
+                || Dzwiek.gra(pid: item.pid) && model.pierwszeKarty.contains(item.id)
+                || GlosnoscAplikacji.czyWyciszony(pid: item.pid) {
+                let wyciszony = GlosnoscAplikacji.czyWyciszony(pid: item.pid)
+                Button {
+                    if let index = model.index(of: item.id) { model.onWyciszenie?(index) }
+                } label: {
+                    Image(systemName: wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(4)
+                        .background(Circle().fill(wyciszony
+                                                  ? Color.red.opacity(0.85)
+                                                  : Color.accentColor.opacity(0.92)))
+                }
+                .buttonStyle(.plain)
+                .help(wyciszony ? "Przywróć dźwięk (⌘M)" : "Wycisz ten program (⌘M)")
+                .padding(4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
 
             if let label = item.place.label {

@@ -96,7 +96,7 @@ enum ZrodloAkcji {
         for okno in okna {
             let tekst = SwitcherModel.uprosc(okno.title + " " + okno.subtitle)
             guard szukane.isEmpty || tekst.contains(szukane) else { continue }
-            let gra = Dzwiek.gra(pid: okno.pid)
+            let gra = Dzwiek.tytulMowiOGraniu(okno.title) || Dzwiek.gra(pid: okno.pid)
             wynik.append(AkcjaSzybka(id: "okno:\(okno.id)", tytul: okno.title,
                                      podtytul: gra ? "🔊 \(okno.subtitle)" : okno.subtitle,
                                      ikona: okno.icon,
@@ -129,6 +129,24 @@ enum ZrodloAkcji {
                                                           dziala: dziala),
                                          waga: dziala ? 2 : 3))
             }
+        }
+
+        // Wyciszenie jako osobna akcja: gdy cos gra (albo zostalo wyciszone),
+        // czlowiek chce to zwykle uciszyc, a nie tylko sie tam przelaczyc.
+        for okno in okna {
+            let wyciszony = GlosnoscAplikacji.czyWyciszony(pid: okno.pid)
+            guard wyciszony || Dzwiek.gra(pid: okno.pid) || Dzwiek.tytulMowiOGraniu(okno.title) else { continue }
+            let tekst = SwitcherModel.uprosc("wycisz " + okno.subtitle + " " + okno.title)
+            guard szukane.isEmpty || tekst.contains(szukane) else { continue }
+            let pid = okno.pid
+            wynik.append(AkcjaSzybka(
+                id: "wycisz:\(pid)",
+                tytul: wyciszony ? "Przywróć dźwięk — \(okno.subtitle)" : "Wycisz — \(okno.subtitle)",
+                podtytul: wyciszony ? "Ten program jest wyciszony" : "Wycisza tylko ten program",
+                ikona: okno.icon,
+                rodzaj: .polecenie { GlosnoscAplikacji.przelaczWyciszenie(pid: pid) },
+                waga: -2
+            ))
         }
 
         for polecenie in polecenia {

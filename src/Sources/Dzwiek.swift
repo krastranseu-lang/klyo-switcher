@@ -28,6 +28,19 @@ enum Dzwiek {
         grajace().contains(pid)
     }
 
+    /// Znaki, ktorymi PRZEGLADARKI same oznaczaja grajaca karte w jej tytule.
+    ///
+    /// Odkryte pomiarem, nie z dokumentacji: na zrzucie listy karta z filmem
+    /// nazywala sie „Beautiful - YouTube 🔊". Chrome i Safari dopisuja ten znak
+    /// same, wiec dostajemy za darmo to, czego CoreAudio nie umie powiedziec -
+    /// KTORA z kilkunastu kart tego samego programu naprawde gra.
+    private static let znakiGlosnika: [Character] = ["🔊", "🔈", "🔉", "▶"]
+
+    /// Czy tytul sam mowi, ze to okno/karta gra.
+    static func tytulMowiOGraniu(_ tytul: String) -> Bool {
+        tytul.contains(where: { znakiGlosnika.contains($0) })
+    }
+
     static func grajace() -> Set<pid_t> {
         let teraz = CFAbsoluteTimeGetCurrent()
         if teraz - czas < waznosc { return pamiec }

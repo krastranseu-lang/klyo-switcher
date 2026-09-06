@@ -181,6 +181,8 @@ struct WidokSzybkichAkcji: View {
                 lista
             }
             Divider().opacity(0.5)
+            suwakGlosnosci
+            Divider().opacity(0.5)
             stopka
         }
         .frame(minWidth: 560, minHeight: 380)
@@ -283,6 +285,26 @@ struct WidokSzybkichAkcji: View {
                 .fill(wybrany ? Color.accentColor.opacity(0.22) : Color.clear)
         )
         .contentShape(Rectangle())
+    }
+
+    /// Suwak glosnosci calego systemu - publiczne API, dziala od razu.
+    /// Stoi w panelu, bo „chce to sciszyc" i „chce znalezc okno" to dla czlowieka
+    /// ta sama chwila, a nie dwa osobne programy.
+    private var suwakGlosnosci: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "speaker.fill").font(.system(size: 11)).foregroundStyle(.secondary)
+            Slider(value: Binding(
+                get: { Double(GlosnoscAplikacji.glosnoscSystemu ?? 0) },
+                set: { GlosnoscAplikacji.glosnoscSystemu = Float($0) }
+            ), in: 0...1)
+            Image(systemName: "speaker.wave.3.fill").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+        .disabled(GlosnoscAplikacji.glosnoscSystemu == nil)
+        .help(GlosnoscAplikacji.glosnoscSystemu == nil
+              ? "To wyjście dźwięku nie pozwala sterować głośnością (np. HDMI)"
+              : "Głośność całego systemu")
     }
 
     private var stopka: some View {
