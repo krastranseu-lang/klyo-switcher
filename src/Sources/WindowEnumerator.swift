@@ -437,7 +437,12 @@ enum WindowActivator {
         // Najpierw WindowServer (przelacza biurko i oddaje fokus), potem Accessibility,
         // zeby sama aplikacja wiedziala, ktore z jej okien jest teraz glowne.
         let broughtByWindowServer = WindowFocus.bring(windowID: windowID, pid: pid)
-        if let window {
+        // Podnoszenie okna PRZED przejsciem na jego biurko jest bledem, ktory widac
+        // od razu: `AXRaise` na oknie z innego biurka nie przenosi CIEBIE do okna,
+        // tylko OKNO do ciebie. Uzytkownik zglosil to jednym zdaniem - „nie przerzuca
+        // biurka, tylko otwiera w tym samym biurku okna z innego biurka".
+        // Na wlasnym biurku podniesienie jest w porzadku i zostaje.
+        if let window, !naInnymBiurku {
             AXUIElementSetAttributeValue(window, AXKey.main as CFString, kCFBooleanTrue)
             AXUIElementSetAttributeValue(axApp, AXKey.focusedWindow as CFString, window)
             AXUIElementPerformAction(window, AXKey.raise as CFString)
@@ -460,7 +465,7 @@ enum WindowActivator {
             // Nie udaje klawiatury, nie liczy krokow i nie zalezy od tego, czy
             // uzytkownik ma wlaczone systemowe skroty przechodzenia miedzy biurkami.
             if let cel = biurkoCelu, WindowFocus.skoczNaBiurko(cel, mapa: mapa) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                poczekajNaBiurko(cel, prob: 10) {
                     DziennikBiurek.zapisz("po skoku wprost: \(DziennikBiurek.stanBiurek())")
                     podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
                     dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
@@ -486,14 +491,17 @@ enum WindowActivator {
                 DziennikBiurek.zapisz("WindowServer nie przelaczyl - przechodze skrotem o \(kroki) krok(ow)")
                 SkrotBiurka.przejdzKrokami(kroki) {
                     DziennikBiurek.zapisz("po przejsciu skrotem: \(DziennikBiurek.stanBiurek())")
+                    // Dopiero gdy system POTWIERDZI biurko, wolno tknac okno.
                     // Samo przejście biurka nie nadaje oknu fokusu — podnosimy je
                     // jeszcze raz, już na właściwym biurku. Tu zapasowa aktywacja
                     // programu jest już bezpieczna: jesteśmy na docelowym biurku,
                     // więc nie ma jak wrócić na tamto, z którego wyszliśmy.
                     _ = WindowFocus.bring(windowID: windowID, pid: pid)
-                    podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
-                    dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
-                                       programNaWierzchuZrodla: programNaWierzchuZrodla)
+                    poczekajNaBiurko(cel, prob: 10) {
+                        podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+                        dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                           programNaWierzchuZrodla: programNaWierzchuZrodla)
+                    }
                 }
             }
             return
@@ -506,6 +514,28 @@ enum WindowActivator {
         // robi `Wierzch`, ktory na koniec PYTA system, ktore okno jest na wierzchu.
         DziennikBiurek.zapisz("WindowServer odpowiedzial: \(broughtByWindowServer ? "przyjete" : "odmowa")")
         podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+    }
+
+    /// Czeka, az system POTWIERDZI, ze jestesmy na wskazanym biurku.
+    ///
+    /// Kazde dotkniecie okna wykonane wczesniej dzieje sie jeszcze na starym
+    /// biurku - a wtedy system robi rzecz odwrotna do zamierzonej: przynosi okno
+    /// do nas, zamiast przeniesc nas do okna. Wolimy poczekac 1,2 s niz wyrwac
+    /// komus okno z drugiego biurka.
+    private static func poczekajNaBiurko(_ biurko: SpaceID, prob: Int, dalej: @escaping () -> Void) {
+        let mapa = Spaces.map()
+        if !mapa.isAvailable || mapa.current.contains(biurko) {
+            DziennikBiurek.zapisz("biurko \(biurko) potwierdzone - podnosze okno")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: dalej)
+            return
+        }
+        guard prob > 1 else {
+            DziennikBiurek.zapisz("biurko \(biurko) NIE potwierdzone mimo czekania - nie ruszam okna")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            poczekajNaBiurko(biurko, prob: prob - 1, dalej: dalej)
+        }
     }
 
     /// Podniesienie okna, gdy jestesmy juz na jego biurku.
