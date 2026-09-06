@@ -163,6 +163,34 @@ final class Updater {
     // MARK: - Instalacja
 
     private func install(_ appcast: Appcast) {
+        // Programu uruchomionego z katalogu tymczasowego NIE DA SIĘ zaktualizować.
+        //
+        // macOS uruchamia stamtąd każdy program pobrany z internetu, dopóki nie
+        // trafi do Programów. Katalog jest TYLKO DO ODCZYTU, więc podmiana pliku
+        // kończy się niczym — a program zdąży się już zamknąć i człowiek zostaje
+        // z pustym miejscem po nim. Dokładnie to się stało: „kliknąłem aktualizuj
+        // i zamknęło się, i się nie otwiera".
+        //
+        // Nie próbujemy więc niemożliwego. Mówimy, co trzeba zrobić raz, i sami
+        // to proponujemy.
+        if Bundle.main.bundlePath.contains("/AppTranslocation/") {
+            let alert = NSAlert()
+            alert.messageText = "Najpierw przenieś program do katalogu Programy"
+            alert.informativeText = """
+                macOS uruchomił \(AppInfo.name) z katalogu tymczasowego, bo program nie stoi jeszcze                 w Programach. Tego katalogu nie da się zmienić, więc aktualizacja nie miałaby gdzie                 zapisać nowej wersji.
+
+                Przeniosę program do katalogu Programy i uruchomię go ponownie. Potem aktualizacje                 będą działać jednym kliknięciem, a zgody systemowe przestaną się gubić.
+                """
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Przenieś i uruchom ponownie")
+            alert.addButton(withTitle: "Nie teraz")
+            if #available(macOS 14.0, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+            if alert.runModal() == .alertFirstButtonReturn {
+                NotificationCenter.default.post(name: .klyoPrzeniesDoProgramow, object: nil)
+            }
+            return
+        }
+
         guard !isInstalling else { return }
         // Droga glowna: gotowy program. Uzytkownik nie potrzebuje do tego ani
         // kompilatora, ani narzedzi Apple - a to wlasnie o nie rozbijala sie
