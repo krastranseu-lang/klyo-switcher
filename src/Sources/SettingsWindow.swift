@@ -33,6 +33,22 @@ enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
         }
     }
 
+    /// Kolor kafelka ikony w pasku bocznym.
+    ///
+    /// Ustawienia systemowe macOS oznaczają każdą pozycję innym kolorem i ludzie
+    /// odnajdują ją wzrokiem po kolorze, zanim przeczytają nazwę (Prawo Jakoba:
+    /// nie wymyślamy własnych konwencji tam, gdzie użytkownik zna cudze).
+    var kolorIkony: Color {
+        switch self {
+        case .general: return Color(nsColor: .systemGray)
+        case .schowek: return Color(nsColor: .systemOrange)
+        case .browsers: return Color(nsColor: .systemBlue)
+        case .screenshots: return Color(nsColor: .systemGreen)
+        case .shortcuts: return Color(nsColor: .systemPurple)
+        case .updates: return Color(nsColor: .systemTeal)
+        }
+    }
+
     /// Jedno zdanie, po co tu wchodzic - zeby nie trzeba bylo klikac po kolei
     /// i sprawdzac, co sie gdzie chowa.
     var opis: String {
@@ -302,18 +318,47 @@ struct KeyRecorder: View {
 
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
+    @State private var szukaj = ""
+
+    /// Wyszukiwanie po nazwie I po opisie — człowiek pamięta zwykle funkcję
+    /// („autostart"), a nie kategorię, w której ją schowaliśmy.
+    private var widoczneSekcje: [SettingsTab] {
+        let fraza = szukaj.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !fraza.isEmpty else { return SettingsTab.allCases }
+        let znalezione = SettingsTab.allCases.filter {
+            $0.nazwa.lowercased().contains(fraza) || $0.opis.lowercased().contains(fraza)
+        }
+        // Pusty wynik wyszukiwania nie może zostawić pustego paska bocznego —
+        // wtedy okno wygląda na zepsute. Lepiej pokazać wszystko.
+        return znalezione.isEmpty ? SettingsTab.allCases : znalezione
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsTab.allCases, selection: Binding(
+            List(widoczneSekcje, selection: Binding(
                 get: { store.tab },
                 set: { store.tab = $0 ?? store.tab }
             )) { sekcja in
-                Label(sekcja.nazwa, systemImage: sekcja.ikona)
-                    .padding(.vertical, 3)
-                    .tag(sekcja)
+                HStack(spacing: 9) {
+                    // Ikona na kolorowym kafelku - dokladnie tak wyglada pasek
+                    // boczny Ustawien systemowych. Rozmiar 20 pt i promien 5 pt
+                    // to wymiary, ktorych uzywa system.
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(sekcja.kolorIkony)
+                        .frame(width: 20, height: 20)
+                        .overlay(
+                            Image(systemName: sekcja.ikona)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white)
+                        )
+                    Text(sekcja.nazwa)
+                }
+                .padding(.vertical, 1)
+                .tag(sekcja)
             }
-            .navigationSplitViewColumnWidth(min: 196, ideal: 212, max: 240)
+            .listStyle(.sidebar)
+            .searchable(text: $szukaj, placement: .sidebar, prompt: "Szukaj")
+            .navigationSplitViewColumnWidth(min: 200, ideal: 215, max: 260)
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
                 naglowek
