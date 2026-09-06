@@ -282,6 +282,31 @@ enum PrzelaczanieBiurek {
     ///
     /// Zmieniamy CUDZE ustawienie systemowe, wiec robimy to wylacznie na wyrazne
     /// klikniecie czlowieka - nigdy sami przy starcie.
+    /// Ustawia wartosc w obie strony - wlaczyc i wylaczyc.
+    @discardableResult
+    static func ustaw(_ wlaczone: Bool) -> Bool {
+        UserDefaults.standard.set(wlaczone, forKey: klucz)
+        UserDefaults.standard.synchronize()
+
+        let zapis = Process()
+        zapis.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        zapis.arguments = ["write", "-g", klucz, "-bool", wlaczone ? "true" : "false"]
+        zapis.standardOutput = FileHandle.nullDevice
+        zapis.standardError = FileHandle.nullDevice
+        guard (try? zapis.run()) != nil else { return false }
+        zapis.waitUntilExit()
+
+        // Bez przeladowania Docka ustawienie zaczyna dzialac dopiero po wylogowaniu.
+        let dock = Process()
+        dock.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        dock.arguments = ["Dock"]
+        dock.standardOutput = FileHandle.nullDevice
+        dock.standardError = FileHandle.nullDevice
+        try? dock.run()
+        dock.waitUntilExit()
+        return zapis.terminationStatus == 0
+    }
+
     @discardableResult
     static func wlacz() -> Bool {
         UserDefaults.standard.set(true, forKey: klucz)
