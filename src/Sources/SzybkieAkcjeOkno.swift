@@ -40,6 +40,9 @@ final class SzybkieAkcjeController: NSObject, NSWindowDelegate {
 
     private var okno: NSPanel?
     private let model = ModelSzybkichAkcji()
+    /// Podsluch klawiszy TEGO okna. Strzalki i Esc musza dzialac, choc kursor
+    /// stoi w polu tekstowym - inaczej stopka obiecuje ruch, ktorego nie ma.
+    private var klawisze: Any?
     /// Zrodla danych wstrzykiwane przez `AppController` - okno nie zbiera ich samo,
     /// bo spis okien i indeks kart maja juz swoich wlascicieli.
     var zbierzOkna: (() -> [SwitcherItem])?
@@ -89,14 +92,38 @@ final class SzybkieAkcjeController: NSObject, NSWindowDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
         okno?.makeKeyAndOrderFront(nil)
+        wepnijKlawisze()
     }
 
     func schowaj() {
+        odepnijKlawisze()
         okno?.orderOut(nil)
         NSApp.setActivationPolicy(.accessory)
     }
 
+    /// Strzalki chodza po wynikach, Esc zamyka, Enter wykonuje (Enter obsluguje
+    /// samo pole tekstowe). Monitor jest LOKALNY - dziala tylko, gdy to okno jest
+    /// aktywne, i nie dotyka klawiatury reszty systemu.
+    private func wepnijKlawisze() {
+        odepnijKlawisze()
+        klawisze = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] zdarzenie in
+            guard let self, self.okno?.isKeyWindow == true else { return zdarzenie }
+            switch zdarzenie.keyCode {
+            case 125: self.model.przesun(1); return nil    // strzalka w dol
+            case 126: self.model.przesun(-1); return nil   // strzalka w gore
+            case 53:  self.schowaj(); return nil           // Esc
+            default:  return zdarzenie
+            }
+        }
+    }
+
+    private func odepnijKlawisze() {
+        if let klawisze { NSEvent.removeMonitor(klawisze) }
+        klawisze = nil
+    }
+
     func windowWillClose(_ notification: Notification) {
+        odepnijKlawisze()
         NSApp.setActivationPolicy(.accessory)
     }
 
