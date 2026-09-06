@@ -102,6 +102,18 @@ final class SwitcherController {
             guard let self else { return }
             self.quitApplication(at: self.model.selection, force: force)
         }
+        // Panel szybkich akcji: przytrzymanie modyfikatora. Spis okien bierze
+        // stad, zeby nie zbierac go drugi raz wlasnym kodem.
+        hotkey.onSzybkieAkcje = { [weak self] in
+            guard let self else { return }
+            SzybkieAkcjeController.shared.zbierzOkna = { [weak self] in
+                guard let self else { return [] }
+                return self.enumerator.snapshot(browsers: self.browsers, usage: self.usage)
+            }
+            SzybkieAkcjeController.shared.przegladarki = self.browsers
+            SzybkieAkcjeController.shared.przelacz()
+        }
+
         hotkey.onPermissionGranted = { [weak self] in
             self?.browsers.attachPendingObservers()
             self?.browsers.refresh(after: 0.3)
@@ -138,6 +150,11 @@ final class SwitcherController {
             HistoriaKartPrzegladarki.brakKart = (ile == 0)
         }
         hotkey.install()
+    }
+
+    /// Spis okien dla panelu szybkich akcji - ten sam, ktory widzi ⌘⇥.
+    func spisOkienDlaAkcji() -> [SwitcherItem] {
+        enumerator.snapshot(browsers: browsers, usage: usage)
     }
 
     // MARK: - Zamykanie z poziomu przelacznika

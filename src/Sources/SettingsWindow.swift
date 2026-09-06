@@ -128,6 +128,15 @@ final class SettingsStore: ObservableObject {
     @Published var spacesMode: SpacesMode = .allDesktops { didSet { commit { Settings.spacesMode = spacesMode } } }
     @Published var tabLimit: Int = 6 { didSet { commit { Settings.tabLimitPerWindow = tabLimit } } }
     /// Co widac po najechaniu mysza na karte - wybierane rysunkiem, patrz `WyborWygladu`.
+    @Published var akcjeWlaczone: Bool = true {
+        didSet { Settings.szybkieAkcjeWlaczone = akcjeWlaczone; SettingsBus.announce() }
+    }
+    @Published var akcjeModyfikator: HotkeyModifier = .control {
+        didSet { Settings.szybkieAkcjeModyfikator = akcjeModyfikator; SettingsBus.announce() }
+    }
+    @Published var akcjeCzas: Int = 400 {
+        didSet { Settings.szybkieAkcjeCzasMs = akcjeCzas; SettingsBus.announce() }
+    }
     @Published var trybPodgladu: TrybPodgladu = .duzy {
         didSet { commit { Settings.trybPodgladu = trybPodgladu } }
     }
@@ -210,6 +219,9 @@ final class SettingsStore: ObservableObject {
         tabLimit = Settings.tabLimitPerWindow
         thumbnails = Settings.showThumbnails
         trybPodgladu = Settings.trybPodgladu
+        akcjeWlaczone = Settings.szybkieAkcjeWlaczone
+        akcjeModyfikator = Settings.szybkieAkcjeModyfikator
+        akcjeCzas = Settings.szybkieAkcjeCzasMs
         historiaSchowka = Settings.historiaSchowkaWlaczona
         limitHistorii = Settings.limitHistoriiSchowka
         dniHistorii = Settings.dniHistoriiSchowka
@@ -530,6 +542,12 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(store.przelaczajBiurka ? .secondary : Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Szybkie akcje") {
+                    WyborSzybkichAkcji(wlaczone: $store.akcjeWlaczone,
+                                       modyfikator: $store.akcjeModyfikator,
+                                       czasMs: $store.akcjeCzas)
                 }
 
                 section("Pod kursorem") {

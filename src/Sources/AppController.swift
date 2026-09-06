@@ -492,6 +492,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         spacesItem.submenu = spacesMenu
         menu.addItem(spacesItem)
 
+        if Settings.szybkieAkcjeWlaczone {
+            let akcje = NSMenuItem(
+                title: "Szybkie akcje  (przytrzymaj \(Settings.szybkieAkcjeModyfikator.symbol))",
+                action: #selector(pokazSzybkieAkcje),
+                keyEquivalent: ""
+            )
+            akcje.target = self
+            menu.addItem(akcje)
+        }
+
         if Settings.historiaSchowkaWlaczona {
             let historia = NSMenuItem(
                 title: "Historia kopiowania  (\(Settings.skrotHistoriiSchowka.display))",
@@ -561,6 +571,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func pokazZgody() {
         OknoUprawnienController.shared.pokaz()
+    }
+
+    @objc private func pokazSzybkieAkcje() {
+        SzybkieAkcjeController.shared.zbierzOkna = { [weak self] in
+            guard let self else { return [] }
+            return self.switcher.spisOkienDlaAkcji()
+        }
+        SzybkieAkcjeController.shared.przegladarki = switcher.browsers
+        SzybkieAkcjeController.shared.pokaz()
     }
 
     @objc private func pokazHistorieSchowka() {

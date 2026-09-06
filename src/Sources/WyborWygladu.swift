@@ -105,6 +105,104 @@ private struct RysunekWariantu: View {
     }
 }
 
+// MARK: - Szybkie akcje: ktory klawisz przytrzymac
+//
+// Znowu obrazkiem: rysunek pokazuje wcisniety klawisz i wyskakujace okienko.
+// Wybor modyfikatora to trzy kafelki, a nie lista rozwijana - klikasz ten,
+// ktorego trzymasz kciukiem.
+
+struct WyborSzybkichAkcji: View {
+    @Binding var wlaczone: Bool
+    @Binding var modyfikator: HotkeyModifier
+    @Binding var czasMs: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Przytrzymanie klawisza otwiera szybkie akcje", isOn: $wlaczone)
+
+            HStack(spacing: 12) {
+                ForEach(HotkeyModifier.allCases, id: \.rawValue) { wariant in
+                    let wybrany = modyfikator == wariant
+                    Button {
+                        modyfikator = wariant
+                    } label: {
+                        VStack(spacing: 7) {
+                            ZStack(alignment: .bottomTrailing) {
+                                // Klawisz
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(wybrany ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.08))
+                                    .frame(width: 46, height: 34)
+                                    .overlay(
+                                        Text(wariant.symbol)
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .foregroundStyle(wybrany ? Color.accentColor : Color.primary.opacity(0.65))
+                                    )
+                                // Okienko, ktore z niego wyskakuje
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(wybrany ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.22))
+                                    .frame(width: 30, height: 20)
+                                    .overlay(
+                                        VStack(spacing: 2) {
+                                            ForEach(0..<3, id: \.self) { _ in
+                                                RoundedRectangle(cornerRadius: 1)
+                                                    .fill(Color.white.opacity(0.75))
+                                                    .frame(width: 18, height: 2)
+                                            }
+                                        }
+                                    )
+                                    .offset(x: 16, y: 12)
+                            }
+                            .frame(width: 70, height: 52, alignment: .topLeading)
+                            Text(wariant.symbol + " " + nazwa(wariant))
+                                .font(.system(size: 11, weight: wybrany ? .semibold : .regular))
+                        }
+                        .frame(width: 88, height: 82)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(wybrany ? Color.accentColor : Color.primary.opacity(0.12),
+                                              lineWidth: wybrany ? 2 : 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!wlaczone)
+                }
+            }
+            .opacity(wlaczone ? 1 : 0.4)
+
+            HStack(spacing: 10) {
+                Text("Po jakim czasie")
+                    .font(.system(size: 12))
+                Slider(value: Binding(get: { Double(czasMs) },
+                                      set: { czasMs = Int($0.rounded()) }),
+                       in: 200...900, step: 50)
+                    .frame(width: 190)
+                Text("\(czasMs) ms")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(!wlaczone)
+            .opacity(wlaczone ? 1 : 0.4)
+
+            Text("Sam przytrzymany klawisz otwiera panel. Użyty razem z innym klawiszem działa jak zwykle — ⌃⇥ i ⌃1…9 zostają nietknięte.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func nazwa(_ wariant: HotkeyModifier) -> String {
+        switch wariant {
+        case .command: return "Command"
+        case .option: return "Option"
+        case .control: return "Control"
+        }
+    }
+}
+
 // MARK: - Jak dlugo trzymamy historie kopiowania
 //
 // Te sama zasada co wyzej: wybor obrazkiem. Kazdy wariant to slupek pokazujacy,

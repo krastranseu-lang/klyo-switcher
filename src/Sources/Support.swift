@@ -416,11 +416,15 @@ enum ScreenshotFormat: String, CaseIterable {
 enum HotkeyModifier: String, CaseIterable {
     case command
     case option
+    /// Dolozony dla panelu szybkich akcji: Control nie jest uzywany jako
+    /// modyfikator przelacznika okien, wiec jego PRZYTRZYMANIE jest wolne.
+    case control
 
     var eventFlag: CGEventFlags {
         switch self {
         case .command: return .maskCommand
         case .option: return .maskAlternate
+        case .control: return .maskControl
         }
     }
 
@@ -428,8 +432,22 @@ enum HotkeyModifier: String, CaseIterable {
         switch self {
         case .command: return "⌘"
         case .option: return "⌥"
+        case .control: return "⌃"
         }
     }
+
+    /// Kod klawisza - potrzebny, gdy rozpoznajemy PRZYTRZYMANIE samego modyfikatora.
+    var kodKlawisza: Int64 {
+        switch self {
+        case .command: return 55
+        case .option: return 58
+        case .control: return 59
+        }
+    }
+
+    /// Modyfikatory, ktore moga byc skrotem przelacznika okien. Control z tej listy
+    /// wypada: ⌃⇥ jest w macOS skrotem przechodzenia miedzy kartami.
+    static var doPrzelacznika: [HotkeyModifier] { [.command, .option] }
 }
 
 enum Settings {
@@ -457,6 +475,9 @@ enum Settings {
         static let skrotSchowka = "skrotHistoriiSchowka"
         static let skrotCzystegoTekstu = "skrotCzystegoTekstu"
         static let trybPodgladu = "trybPodgladuPodKursorem"
+        static let akcjeWlaczone = "szybkieAkcjeWlaczone"
+        static let akcjeModyfikator = "szybkieAkcjeModyfikator"
+        static let akcjeCzas = "szybkieAkcjeCzasMs"
         static let wklejajCzysty = "wklejajCzystyTekst"
         static let wklejajPrzycinaj = "wklejajPrzycinajSpacje"
         static let wklejajBezDoczepek = "wklejajBezDoczepek"
@@ -473,6 +494,9 @@ enum Settings {
             Key.tabLimit: 6,
             Key.thumbnails: true,
             Key.trybPodgladu: TrybPodgladu.duzy.rawValue,
+            Key.akcjeWlaczone: true,
+            Key.akcjeModyfikator: HotkeyModifier.control.rawValue,
+            Key.akcjeCzas: 400,
             Key.launchAtLogin: true,
             Key.didBootstrap: false,
             Key.screenshotEnabled: true,
@@ -579,6 +603,26 @@ enum Settings {
     static var historiaSchowkaWlaczona: Bool {
         get { defaults.bool(forKey: Key.historiaSchowka) }
         set { defaults.set(newValue, forKey: Key.historiaSchowka) }
+    }
+
+    /// Panel szybkich akcji otwierany PRZYTRZYMANIEM modyfikatora.
+    static var szybkieAkcjeWlaczone: Bool {
+        get { defaults.bool(forKey: Key.akcjeWlaczone) }
+        set { defaults.set(newValue, forKey: Key.akcjeWlaczone) }
+    }
+
+    /// Ktory klawisz trzeba przytrzymac. Domyslnie ⌃ Control - nie koliduje ani
+    /// z ⌘⇥, ani z systemowym Ctrl+1…9 od biurek (te dzialaja z cyfra, a panel
+    /// otwiera SAM przytrzymany klawisz).
+    static var szybkieAkcjeModyfikator: HotkeyModifier {
+        get { HotkeyModifier(rawValue: defaults.string(forKey: Key.akcjeModyfikator) ?? "") ?? .control }
+        set { defaults.set(newValue.rawValue, forKey: Key.akcjeModyfikator) }
+    }
+
+    /// Jak dlugo trzeba trzymac, zeby panel wyskoczyl (milisekundy).
+    static var szybkieAkcjeCzasMs: Int {
+        get { max(150, defaults.integer(forKey: Key.akcjeCzas)) }
+        set { defaults.set(max(150, newValue), forKey: Key.akcjeCzas) }
     }
 
     /// Co program pokazuje, gdy kursor stanie na karcie - wybierane RYSUNKIEM

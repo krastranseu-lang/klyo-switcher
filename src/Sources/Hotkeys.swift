@@ -69,6 +69,8 @@ final class HotkeyRouter {
     /// zostaje przypisany do starej tozsamosci, a nowy program go nie dziedziczy.
     /// Bez tego sygnalu program wyglada na zepsuty: ikona jest, zgoda „jest",
     /// a ⌘ Tab dalej otwiera systemowy przelacznik.
+    /// Przytrzymanie samego modyfikatora - otwarcie panelu szybkich akcji.
+    var onSzybkieAkcje: (() -> Void)?
     var onZgodaNieDziala: (() -> Void)?
     var isSessionActive: () -> Bool = { false }
 
@@ -88,6 +90,12 @@ final class HotkeyRouter {
     private var schowekEnabled = false
     private var czystyTekstCombo: KeyCombo = .unset
     private var wklejanieWlaczone = false
+    private var akcjeWlaczone = false
+    private var akcjeFlaga: CGEventFlags = .maskControl
+    private var akcjeKod: Int64 = 59
+    private var akcjeCzas: TimeInterval = 0.4
+    /// Zadanie czekajace na uplyw czasu przytrzymania. Kazdy inny klawisz je kasuje.
+    private var akcjeOczekiwanie: DispatchWorkItem?
     private var appShortcuts: [AppShortcut] = []
 
     init() {
@@ -118,6 +126,10 @@ final class HotkeyRouter {
         schowekEnabled = Settings.historiaSchowkaWlaczona
         czystyTekstCombo = Settings.skrotCzystegoTekstu
         wklejanieWlaczone = Wklejanie.wlaczone
+        akcjeWlaczone = Settings.szybkieAkcjeWlaczone
+        akcjeFlaga = Settings.szybkieAkcjeModyfikator.eventFlag
+        akcjeKod = Settings.szybkieAkcjeModyfikator.kodKlawisza
+        akcjeCzas = Double(Settings.szybkieAkcjeCzasMs) / 1000.0
         appShortcuts = Settings.appShortcuts.filter { $0.combo.isSet }
     }
 
@@ -231,6 +243,8 @@ final class HotkeyRouter {
 
         switch type {
         case .keyDown:
+            // Modyfikator uzyty RAZEM z klawiszem to zwykly skrot, nie przytrzymanie.
+            anulujOczekiwanieAkcji()
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
 
@@ -337,6 +351,7 @@ final class HotkeyRouter {
             return Unmanaged.passUnretained(event)
 
         case .flagsChanged:
+            rozpoznajPrzytrzymanie(event)
             guard isSessionActive() else { return Unmanaged.passUnretained(event) }
             if !event.flags.contains(switcherModifier) {
                 onCommit?()
@@ -358,6 +373,41 @@ final class HotkeyRouter {
             }
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    // MARK: - Przytrzymanie modyfikatora
+
+    /// Panel akcji otwiera sie po przytrzymaniu SAMEGO modyfikatora przez zadany
+    /// czas. Warunek „sam" jest istotny: ⌃⇥ i ⌃1…9 maja dalej dzialac normalnie,
+    /// wiec kazde nacisniecie klawisza kasuje odliczanie.
+    private func rozpoznajPrzytrzymanie(_ event: CGEvent) {
+        guard akcjeWlaczone, onSzybkieAkcje != nil else { return }
+        let flagi = event.flags
+        let inneModyfikatory: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+            .subtracting(akcjeFlaga)
+        let samNasz = flagi.contains(akcjeFlaga) && flagi.intersection(inneModyfikatory).isEmpty
+        let tenKlawisz = event.getIntegerValueField(.keyboardEventKeycode) == akcjeKod
+
+        guard samNasz, tenKlawisz else {
+            anulujOczekiwanieAkcji()
+            return
+        }
+        anulujOczekiwanieAkcji()
+        let zadanie = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            // Sprawdzenie u zrodla: klawisz musi byc DALEJ wcisniety. Zdarzenie
+            // zwolnienia potrafi zginac, a panel otwarty po fakcie wyglada
+            // jak przypadkowe wyskoczenie okna.
+            guard CGEventSource.flagsState(.hidSystemState).contains(self.akcjeFlaga) else { return }
+            self.onSzybkieAkcje?()
+        }
+        akcjeOczekiwanie = zadanie
+        DispatchQueue.main.asyncAfter(deadline: .now() + akcjeCzas, execute: zadanie)
+    }
+
+    private func anulujOczekiwanieAkcji() {
+        akcjeOczekiwanie?.cancel()
+        akcjeOczekiwanie = nil
     }
 }
 
