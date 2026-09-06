@@ -142,217 +142,26 @@ final class ModelMiksera: ObservableObject {
         pozycje[miejsce] = Pozycja(id: stara.id, nazwa: stara.nazwa, ikona: stara.ikona,
                                    gra: stara.gra, wyciszony: poziom <= 0.0001, poziom: poziom)
     }
-}
 
-struct MikserView: View {
-    @ObservedObject var model: ModelMiksera
+    // MARK: Karty
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Barwy.blekit)
-                Text("Mikser dźwięku")
-                    .font(.system(size: 16, weight: .bold))
-                Spacer()
-                Text(model.pozycje.isEmpty ? "cisza" : "\(model.pozycje.count)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Capsule().fill(Color.white.opacity(0.12)))
-            }
+    /// Poziom karty w skali 0…1 (100% = strona gra tak, jak ustawila sama).
+    func poziomKarty(_ karta: KartaGrajaca) -> Float { GlosnoscKarty.poziom(karta) }
 
-            glosnosc
+    /// Ostatni powod, dla ktorego suwak karty nie zadzialal - pokazywany przy
+    /// tej karcie, zeby czlowiek wiedzial, czego brakuje, zamiast szarpac suwak.
+    @Published private(set) var powodyKart: [String: String] = [:]
 
-            Divider().opacity(0.25)
-
-            if model.pozycje.isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "speaker.slash").foregroundStyle(.secondary)
-                    Text("Teraz nic nie gra.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 18)
-            } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        ForEach(model.pozycje) { pozycja in
-                            VStack(spacing: 6) {
-                                wiersz(pozycja)
-                                ForEach(model.karty[pozycja.id] ?? []) { karta in
-                                    wierszKarty(karta)
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxHeight: 260)
-            }
-
-            if GlosnoscAplikacji.dostepne, !model.pozycje.isEmpty {
-                Text("Suwak przy programie zmienia głośność TYLKO jego — reszta gra jak grała. 100% znaczy, że program nie przechodzi przez mikser w ogóle.")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !GlosnoscAplikacji.dostepne {
-                Text("Wyciszanie pojedynczego programu wymaga macOS 14.2 lub nowszego.")
-                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
-            }
+    func ustawPoziomKarty(_ karta: KartaGrajaca, _ nowy: Float) {
+        let wynik = GlosnoscKarty.ustaw(karta, poziom: nowy)
+        let klucz = GlosnoscKarty.klucz(karta)
+        if let powod = wynik.powod {
+            powodyKart[klucz] = powod
+        } else {
+            powodyKart.removeValue(forKey: klucz)
         }
-        .padding(20)
-        .frame(width: 420)
-        .background(tlo)
+        odswiez()
     }
 
-    private var glosnosc: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Głośność systemu")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                Image(systemName: "speaker.fill").font(.system(size: 10)).foregroundStyle(.secondary)
-                Slider(value: $model.glosnoscSystemu, in: 0...1)
-                    .disabled(!model.glosnoscDostepna)
-                Image(systemName: "speaker.wave.3.fill").font(.system(size: 10)).foregroundStyle(.secondary)
-                Text("\(Int(model.glosnoscSystemu * 100))%")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .frame(width: 38, alignment: .trailing)
-            }
-            if !model.glosnoscDostepna {
-                Text("To wyjście nie oddaje głośności systemowi (np. HDMI).")
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func wiersz(_ pozycja: ModelMiksera.Pozycja) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                if let ikona = pozycja.ikona {
-                    Image(nsImage: ikona).resizable().frame(width: 26, height: 26)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(pozycja.nazwa)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .lineLimit(1)
-                    Text(podpis(pozycja))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(barwaPodpisu(pozycja))
-                }
-                Spacer(minLength: 8)
-                if pozycja.gra, !pozycja.wyciszony {
-                    Circle().fill(Color.green).frame(width: 7, height: 7)
-                        .shadow(color: Color.green.opacity(0.8), radius: 4)
-                }
-                Button {
-                    model.przelacz(pozycja.id)
-                } label: {
-                    Image(systemName: pozycja.wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(pozycja.wyciszony ? Color.orange : Color.white)
-                        .frame(width: 30, height: 26)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(pozycja.wyciszony ? 0.20 : 0.12)))
-                }
-                .buttonStyle(.plain)
-                .disabled(!GlosnoscAplikacji.dostepne)
-                .help(pozycja.wyciszony ? "Przywróć dźwięk" : "Wycisz ten program")
-            }
-
-            // Suwak TEGO programu - to jest ta rzecz, ktorej macOS nie ma, a
-            // Windows i Android maja. 100% znaczy „nie dotykamy niczego".
-            HStack(spacing: 10) {
-                Slider(
-                    value: Binding(
-                        get: { Double(pozycja.poziom) },
-                        set: { model.ustawPoziom(pozycja.id, Float($0)) }
-                    ),
-                    in: 0...2
-                )
-                .disabled(!GlosnoscAplikacji.dostepne)
-                Text("\(Int((pozycja.poziom * 100).rounded()))%")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .frame(width: 42, alignment: .trailing)
-                    .foregroundStyle(pozycja.poziom > 1.01 ? Color.orange : Color.primary)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(pozycja.wyciszony ? 0.10 : 0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(pozycja.wyciszony ? Color.orange.opacity(0.45)
-                                                : Color.white.opacity(0.10),
-                              lineWidth: 1)
-        )
-    }
-
-    /// Jedna grajaca karta przegladarki.
-    ///
-    /// Wciecie i mniejszy krok mowia, ze to czesc programu wyzej - a nie osobny
-    /// program. Klikniecie w tytul przenosi na te karte, glosnik ja wycisza.
-    private func wierszKarty(_ karta: KartaGrajaca) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.secondary)
-            Button {
-                model.pokazKarte(karta)
-            } label: {
-                Text(karta.tytul)
-                    .font(.system(size: 11.5))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(karta.wyciszona ? Color.secondary : Color.primary)
-            }
-            .buttonStyle(.plain)
-            .help("Przejdź do tej karty")
-            Spacer(minLength: 6)
-            if !karta.wyciszona {
-                Circle().fill(Color.green).frame(width: 5, height: 5)
-            }
-            Button {
-                model.przelaczKarte(karta)
-            } label: {
-                Image(systemName: karta.wyciszona ? "speaker.slash" : "speaker.wave.2")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(karta.wyciszona ? Color.orange : Color.primary)
-                    .frame(width: 26, height: 22)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.white.opacity(0.10)))
-            }
-            .buttonStyle(.plain)
-            .help(karta.wyciszona ? "Przywróć dźwięk tej karty" : "Wycisz tę kartę")
-        }
-        .padding(.leading, 22)
-        .padding(.trailing, 10)
-        .padding(.vertical, 4)
-    }
-
-    private func podpis(_ pozycja: ModelMiksera.Pozycja) -> String {
-        if pozycja.wyciszony { return "wyciszony" }
-        if pozycja.poziom > 1.01 { return "wzmocniony do \(Int((pozycja.poziom * 100).rounded()))%" }
-        if pozycja.poziom < 0.99 { return "przyciszony do \(Int((pozycja.poziom * 100).rounded()))%" }
-        return pozycja.gra ? "gra teraz" : "cicho"
-    }
-
-    private func barwaPodpisu(_ pozycja: ModelMiksera.Pozycja) -> Color {
-        if pozycja.wyciszony { return .orange }
-        if abs(pozycja.poziom - 1.0) > 0.01 { return Barwy.blekit }
-        return pozycja.gra ? .green : .secondary
-    }
-
-    private var tlo: some View {
-        ZStack {
-            VisualEffectBackground()
-            LinearGradient(colors: [Color.white.opacity(0.06), Color.clear],
-                           startPoint: .top, endPoint: .bottom)
-        }
-    }
+    func powodKarty(_ karta: KartaGrajaca) -> String? { powodyKart[GlosnoscKarty.klucz(karta)] }
 }

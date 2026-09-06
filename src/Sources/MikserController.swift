@@ -24,7 +24,7 @@ final class MikserController: NSObject, NSWindowDelegate {
         model.odswiez()
         if okno == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+                contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -36,7 +36,7 @@ final class MikserController: NSObject, NSWindowDelegate {
             panel.isReleasedWhenClosed = false
             panel.delegate = self
             panel.contentView = NSHostingView(rootView: MikserView(model: model))
-            panel.setContentSize(NSSize(width: 420, height: 460))
+            panel.setContentSize(NSSize(width: 440, height: 540))
             panel.center()
             okno = panel
         }

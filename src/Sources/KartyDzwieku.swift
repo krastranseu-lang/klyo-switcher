@@ -106,16 +106,23 @@ enum KartyDzwieku {
                 let gra = sladyGrania.contains(where: { male.contains($0) })
                     || opis.contains(where: { znakiGlosnika.contains($0) })
                     || przycisk != nil
-                let wyciszona = sladyWyciszenia.contains(where: { male.contains($0) })
+                let wyciszonaWgPrzegladarki = sladyWyciszenia.contains(where: { male.contains($0) })
                     || sladyWyciszenia.contains(where: { nazwaPrzycisku.contains($0) })
-                guard gra || wyciszona else { continue }
+                let tytul = czystyTytul(opis)
+                // Karta zostaje na liscie takze wtedy, gdy MY jej cos ustawilismy.
+                // Bez tego wyciszona karta znikala natychmiast po wyciszeniu -
+                // Chrome oznacza tylko te, ktore GRAJA - i nie bylo czego kliknac,
+                // zeby dzwiek wrocil. To jest usterka „wylaczylem i juz nie wraca".
+                let nasza = GlosnoscKarty.zapamietany(pid: pid, tytul: tytul)
+                guard gra || wyciszonaWgPrzegladarki || nasza else { continue }
                 wynik.append(KartaGrajaca(
-                    id: "karta:\(pid):\(numer):\(wynik.count):\(opis.prefix(40))",
-                    tytul: czystyTytul(opis),
+                    id: "karta:\(pid):\(numer):\(wynik.count):\(tytul.prefix(40))",
+                    tytul: tytul,
                     pid: pid,
                     program: nazwaProgramu,
                     element: karta,
-                    wyciszona: wyciszona
+                    wyciszona: wyciszonaWgPrzegladarki
+                        || GlosnoscKarty.poziom(pid: pid, tytul: tytul) <= 0.0001
                 ))
             }
         }
