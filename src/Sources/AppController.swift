@@ -6,6 +6,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !terminateIfDuplicate() else { return }
+        // Kolejnosc jest istotna: najpierw sprowadzamy sie na jedyna dozwolona
+        // sciezke, dopiero potem cokolwiek robimy. Program uruchomiony jako
+        // „Klyo Switcher 5.app" nie ma prawa dzialac - zgody systemowe naleza
+        // do innej kopii i nic tego nie zmieni poza przeniesieniem sie tam.
+        guard !znormalizujSciezke() else { return }
         guard !przeniesSieDoProgramow() else { return }
 
         buildStatusItem()
@@ -34,6 +39,102 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // zamiast alertu, ktory tylko odsyla do Ustawien.
             OknoUprawnienController.shared.pokaz(zgodaMartwa: martwa)
         }
+    }
+
+    /// Program ma DOKLADNIE JEDNO miejsce, w ktorym wolno mu istniec:
+    /// `/Applications/Klyo Switcher.app` (albo ten sam katalog w folderze domowym,
+    /// gdy konto nie ma prawa zapisu do systemowego).
+    ///
+    /// Dlaczego to jest twarda zasada, a nie porzadki: macOS przypisuje zgody
+    /// (Dostepnosc, Nagrywanie ekranu) KONKRETNEJ kopii programu - jej sciezce
+    /// i podpisowi. Kazda dodatkowa kopia to dla systemu osobny program z wlasnym
+    /// wpisem. Uzytkownik wlacza wtedy zgode jednej kopii, a uruchamia sie druga
+    /// i nic nie dziala, mimo ptaszka w Ustawieniach. Tak powstaje „Klyo Switcher 5":
+    /// piata kopia, piaty wpis, jedna wlaczona zgoda i zero dzialania.
+    ///
+    /// Kopie z numerem biora sie z rozpakowania paczki tam, gdzie program juz lezy -
+    /// system nie nadpisuje, tylko dokleja numer. Dlatego nie wystarczy sprzatac
+    /// cudzych kopii: gdy to MY jestesmy ta z numerem, musimy przeniesc sie na
+    /// wlasciwe miejsce i uruchomic stamtad.
+    ///
+    /// Zwraca `true`, gdy uruchomiono wlasciwa kopie i ta ma zakonczyc prace.
+    private func znormalizujSciezke() -> Bool {
+        let menedzer = FileManager.default
+        let moja = Bundle.main.bundlePath
+        let nazwaPliku = (moja as NSString).lastPathComponent
+        let bezRozszerzenia = (nazwaPliku as NSString).deletingPathExtension
+        let dom = NSHomeDirectory()
+
+        // Czy jestesmy kopia z numerem? („Klyo Switcher 5")
+        let numerowana: Bool = {
+            guard bezRozszerzenia.hasPrefix(AppInfo.name + " ") else { return false }
+            let reszta = bezRozszerzenia.dropFirst(AppInfo.name.count + 1)
+            return !reszta.isEmpty && reszta.allSatisfy { $0.isNumber }
+        }()
+        guard numerowana else { return false }
+
+        var katalog = "/Applications"
+        if !menedzer.isWritableFile(atPath: katalog) {
+            katalog = "\(dom)/Applications"
+            try? menedzer.createDirectory(atPath: katalog, withIntermediateDirectories: true)
+        }
+        let cel = "\(katalog)/\(AppInfo.name).app"
+        guard cel != moja else { return false }
+
+        // Podmiana przez przestawienie nazw: nowa kopia wchodzi na miejsce starej
+        // jednym ruchem. Gdyby cokolwiek zawiodlo, stara wraca i dalej dziala.
+        let ustepujaca = "\(katalog)/.\(AppInfo.name)-poprzednia-\(getpid()).app"
+        let przygotowana = "\(katalog)/.\(AppInfo.name)-nowa-\(getpid()).app"
+        try? menedzer.removeItem(atPath: ustepujaca)
+        try? menedzer.removeItem(atPath: przygotowana)
+        do { try menedzer.copyItem(atPath: moja, toPath: przygotowana) } catch { return false }
+
+        let bylaStara = menedzer.fileExists(atPath: cel)
+        if bylaStara {
+            do { try menedzer.moveItem(atPath: cel, toPath: ustepujaca) } catch {
+                try? menedzer.removeItem(atPath: przygotowana)
+                return false
+            }
+        }
+        do { try menedzer.moveItem(atPath: przygotowana, toPath: cel) } catch {
+            if bylaStara { try? menedzer.moveItem(atPath: ustepujaca, toPath: cel) }
+            try? menedzer.removeItem(atPath: przygotowana)
+            return false
+        }
+        try? menedzer.removeItem(atPath: ustepujaca)
+
+        // Rejestr programow trzyma opis poprzedniej kopii - bez odswiezenia
+        // polecenie otwarcia potrafi trafic w nieaktualny wpis i nie zrobic nic.
+        let rejestr = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        if menedzer.isExecutableFile(atPath: rejestr) {
+            let odswiez = Process()
+            odswiez.executableURL = URL(fileURLWithPath: rejestr)
+            odswiez.arguments = ["-f", cel]
+            odswiez.standardOutput = FileHandle.nullDevice
+            odswiez.standardError = FileHandle.nullDevice
+            try? odswiez.run()
+            odswiez.waitUntilExit()
+        }
+
+        let konfiguracja = NSWorkspace.OpenConfiguration()
+        konfiguracja.createsNewApplicationInstance = true
+        let grupa = DispatchGroup()
+        grupa.enter()
+        var wystartowala = false
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: cel), configuration: konfiguracja) { program, _ in
+            wystartowala = program != nil
+            grupa.leave()
+        }
+        _ = grupa.wait(timeout: .now() + 12)
+        guard wystartowala else { return false }
+
+        // Ta kopia zrobila swoje. Usuwamy ja, zeby nie zostawic szostej.
+        let doUsuniecia = moja
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
+            try? FileManager.default.trashItem(at: URL(fileURLWithPath: doUsuniecia), resultingItemURL: nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) }
+        return true
     }
 
     /// Kopie z numerem w nazwie („Klyo Switcher 2.app") powstaja, gdy nowa wersja
