@@ -304,6 +304,11 @@ struct SwitcherView: View {
 
     private func card(for item: SwitcherItem) -> some View {
         let isSelected = model.selectedItem?.id == item.id
+        // Miejsce w ulubionych decyduje o obramowaniu i poświacie całej karty —
+        // gwiazdka w rogu sama w sobie jest za mała, żeby rozpoznać ulubiony
+        // program kątem oka w rzędzie kilkunastu kart.
+        let ulubione = Ulubione.miejsce(programu: item.bundleID)
+        let barwaUlubionego = ulubione.map(PaletaUlubionych.barwa)
         // Przyciski widac ZAWSZE. Chowanie ich pod kursorem zmuszaloby do szukania
         // ich myszka, a mysz w tym oknie celowo nic nie wybiera.
         let showsControls = true
@@ -338,14 +343,21 @@ struct SwitcherView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .strokeBorder(
-                    isSelected ? Color.accentColor.opacity(0.95) : Color.white.opacity(0.055),
-                    lineWidth: isSelected ? 1.8 : 1
+                    isSelected
+                        ? Color.accentColor.opacity(0.95)
+                        : (barwaUlubionego?.opacity(0.65) ?? Color.white.opacity(0.055)),
+                    lineWidth: isSelected ? 1.8 : (barwaUlubionego != nil ? 1.4 : 1)
                 )
         )
-        // Wybrana karta stoi minimalnie blizej patrzacego. Cien rysujemy TYLKO pod nia:
-        // cien pod kazda karta zamienilby liste w szarą papkę i kosztowal klatki
-        // na starszym sprzecie.
+        // Wybrana karta stoi minimalnie blizej patrzacego. Czarny cien rysujemy
+        // TYLKO pod nia: cien pod kazda karta zamienilby liste w szarą papkę
+        // i kosztowal klatki na starszym sprzecie.
         .shadow(color: Color.black.opacity(isSelected ? 0.28 : 0), radius: isSelected ? 14 : 0, y: isSelected ? 5 : 0)
+        // Kolorowa poświata ulubionego — osobna warstwa cienia, więc nie gasi
+        // czarnego cienia karty wybranej. Świeci zawsze, także gdy karta jest
+        // akurat zaznaczona, żeby zaznaczenie ulubionego nie „gubiło" koloru.
+        .shadow(color: (barwaUlubionego ?? .clear).opacity(barwaUlubionego != nil ? 0.45 : 0),
+                radius: barwaUlubionego != nil ? 9 : 0)
         .scaleEffect(isSelected ? 1.035 : 1.0)
         .zIndex(isSelected ? 1 : 0)
         .contentShape(Rectangle())
@@ -365,6 +377,19 @@ struct SwitcherView: View {
 
     /// Kadr o stalych proporcjach - dzieki temu rzad kart wyglada jak rzad, a nie
     /// jak zbior obrazkow o przypadkowych wysokosciach. Zrzut okna jest dopasowany
+    /// Wspólna paleta ulubionych: bursztyn, srebro, brąz — jak miejsca na podium.
+    /// Jedno miejsce definicji, używane przez gwiazdkę I przez obramowanie karty,
+    /// żeby oba efekty zawsze mówiły to samo.
+    enum PaletaUlubionych {
+        static func barwa(_ miejsce: Int) -> Color {
+            switch miejsce {
+            case 0: return Color(red: 1.00, green: 0.78, blue: 0.28)   // bursztyn
+            case 1: return Color(red: 0.83, green: 0.85, blue: 0.89)   // srebro
+            default: return Color(red: 0.80, green: 0.60, blue: 0.42) // brąz
+            }
+        }
+    }
+
     /// Znak programu, do którego wracasz najczęściej.
     ///
     /// Trzy stopnie, trzy barwy — bursztyn, srebro, brąz — jak miejsca na podium.
@@ -376,13 +401,7 @@ struct SwitcherView: View {
     /// miniaturze — bez niej gubi się na białym tle strony.
     @ViewBuilder
     private func gwiazdkaUlubionego(_ miejsce: Int) -> some View {
-        let barwa: Color = {
-            switch miejsce {
-            case 0: return Color(red: 1.00, green: 0.78, blue: 0.28)   // bursztyn
-            case 1: return Color(red: 0.83, green: 0.85, blue: 0.89)   // srebro
-            default: return Color(red: 0.80, green: 0.60, blue: 0.42)  // brąz
-            }
-        }()
+        let barwa = PaletaUlubionych.barwa(miejsce)
         Image(systemName: "star.fill")
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(barwa)
