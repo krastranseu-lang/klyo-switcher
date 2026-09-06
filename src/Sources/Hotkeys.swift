@@ -52,6 +52,8 @@ final class HotkeyRouter {
     var onCancel: (() -> Void)?
     var onScreenshot: (() -> Void)?
     var onHistoriaSchowka: (() -> Void)?
+    /// Skrot miksera dzwieku - lista tego, co gra, i wyciszanie po jednym.
+    var onMikser: (() -> Void)?
     var onCzystyTekst: (() -> Void)?
     /// Zwykle ⌘V, gdy uzytkownik wlaczyl przerabianie wklejanej tresci.
     var onWklejenie: (() -> Void)?
@@ -91,6 +93,8 @@ final class HotkeyRouter {
     private var screenshotEnabled = false
     private var schowekCombo: KeyCombo = .unset
     private var schowekEnabled = false
+    private var mikserCombo: KeyCombo = .unset
+    private var mikserWlaczony = false
     private var czystyTekstCombo: KeyCombo = .unset
     private var wklejanieWlaczone = false
     private var akcjeWlaczone = false
@@ -126,6 +130,8 @@ final class HotkeyRouter {
         screenshotCombo = Settings.screenshotCombo
         screenshotEnabled = Settings.screenshotEnabled
         schowekCombo = Settings.skrotHistoriiSchowka
+        mikserCombo = Settings.skrotMiksera
+        mikserWlaczony = Settings.mikserWlaczony
         schowekEnabled = Settings.historiaSchowkaWlaczona
         czystyTekstCombo = Settings.skrotCzystegoTekstu
         wklejanieWlaczone = Wklejanie.wlaczone
@@ -342,6 +348,11 @@ final class HotkeyRouter {
 
             if schowekEnabled, schowekCombo.matches(keyCode: keyCode, flags: flags) {
                 onHistoriaSchowka?()
+                return nil
+            }
+
+            if mikserWlaczony, mikserCombo.matches(keyCode: keyCode, flags: flags) {
+                onMikser?()
                 return nil
             }
 

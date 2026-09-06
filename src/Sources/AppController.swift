@@ -410,6 +410,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func wireExtraShortcuts() {
         switcher.hotkey.onScreenshot = { [weak self] in self?.takeScreenshot() }
         switcher.hotkey.onHistoriaSchowka = { SchowekOknoController.shared.pokaz() }
+        switcher.hotkey.onMikser = { MikserController.shared.przelacz() }
         switcher.hotkey.onZgodaNieDziala = {
             OknoUprawnienController.shared.pokaz(zgodaMartwa: true)
         }
@@ -503,6 +504,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(akcje)
         }
 
+        // Dzwiek: to, o co pytal wlasciciel - „pokazac tutaj, gdzie co gra".
+        // Sekcja pojawia sie TYLKO wtedy, gdy cos naprawde gra albo jest wyciszone;
+        // martwa pozycja „nic nie gra" w kazdym otwarciu menu byla by szumem.
+        if Settings.mikserWlaczony {
+            dopiszDzwiek(do: menu)
+        }
+
         if Settings.historiaSchowkaWlaczona {
             let historia = NSMenuItem(
                 title: "Historia kopiowania  (\(Settings.skrotHistoriiSchowka.display))",
@@ -546,6 +554,75 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quit = NSMenuItem(title: "Zakończ \(AppInfo.name)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+    }
+
+    // MARK: - Dzwiek w menu paska
+
+    /// Lista programow, ktore graja, plus wejscie do miksera.
+    ///
+    /// Kliknieie w program wycisza go albo przywraca - jedno klikniecie, bez
+    /// wchodzenia w zadne okno. Mikser jest dla tych, ktorzy chca przy okazji
+    /// ruszyc glosnosc calego systemu.
+    private func dopiszDzwiek(do menu: NSMenu) {
+        Dzwiek.odswiez()
+        GlosnoscAplikacji.posprzatajPoZamknietych()
+        let grajace = Dzwiek.grajace()
+        let wyciszone = GlosnoscAplikacji.wyciszone
+
+        var programy: [(pid: pid_t, nazwa: String, gra: Bool, wyciszony: Bool)] = []
+        for program in NSWorkspace.shared.runningApplications where program.activationPolicy == .regular {
+            let pid = program.processIdentifier
+            let gra = grajace.contains(pid)
+            let wyciszony = wyciszone.contains(pid)
+            guard gra || wyciszony else { continue }
+            programy.append((pid, program.localizedName ?? "pid \(pid)", gra, wyciszony))
+        }
+
+        let mikser = NSMenuItem(
+            title: "Mikser dźwięku  (\(Settings.skrotMiksera.display))",
+            action: #selector(pokazMikser),
+            keyEquivalent: ""
+        )
+        mikser.target = self
+        menu.addItem(mikser)
+
+        guard !programy.isEmpty else { return }
+
+        let naglowek = NSMenuItem(title: "Teraz gra", action: nil, keyEquivalent: "")
+        naglowek.isEnabled = false
+        menu.addItem(naglowek)
+
+        for wpis in programy.sorted(by: { $0.nazwa.localizedCaseInsensitiveCompare($1.nazwa) == .orderedAscending }) {
+            let pozycja = NSMenuItem(
+                title: "   \(wpis.nazwa)\(wpis.wyciszony ? " — wyciszony" : "")",
+                action: #selector(przelaczWyciszenieZMenu(_:)),
+                keyEquivalent: ""
+            )
+            pozycja.target = self
+            pozycja.representedObject = NSNumber(value: wpis.pid)
+            pozycja.state = wpis.wyciszony ? .on : .off
+            pozycja.image = NSRunningApplication(processIdentifier: wpis.pid)?.icon.map { ikona in
+                let mala = NSImage(size: NSSize(width: 16, height: 16))
+                mala.lockFocus()
+                ikona.draw(in: NSRect(x: 0, y: 0, width: 16, height: 16))
+                mala.unlockFocus()
+                return mala
+            }
+            pozycja.isEnabled = GlosnoscAplikacji.dostepne
+            pozycja.toolTip = GlosnoscAplikacji.dostepne
+                ? "Kliknij, żeby wyciszyć albo przywrócić dźwięk"
+                : "Wyciszanie pojedynczego programu wymaga macOS 14.2"
+            menu.addItem(pozycja)
+        }
+    }
+
+    @objc private func pokazMikser() {
+        MikserController.shared.przelacz()
+    }
+
+    @objc private func przelaczWyciszenieZMenu(_ sender: NSMenuItem) {
+        guard let numer = sender.representedObject as? NSNumber else { return }
+        GlosnoscAplikacji.przelaczWyciszenie(pid: pid_t(numer.int32Value))
     }
 
     // MARK: - Akcje menu

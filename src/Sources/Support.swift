@@ -481,6 +481,9 @@ enum Settings {
         static let wklejajCzysty = "wklejajCzystyTekst"
         static let wklejajPrzycinaj = "wklejajPrzycinajSpacje"
         static let wklejajBezDoczepek = "wklejajBezDoczepek"
+        static let mikserWlaczony = "mikserDzwiekuWlaczony"
+        static let skrotMiksera = "skrotMikseraDzwieku"
+        static let oznaczajGrajace = "oznaczajGrajaceProgramy"
         static let updateFeed = "updateFeedURL"
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -505,6 +508,8 @@ enum Settings {
             Key.screenshotFormat: ScreenshotFormat.jpeg.rawValue,
             Key.screenshotSaveToDisk: true,
             Key.autoCheckUpdates: true,
+            Key.mikserWlaczony: true,
+            Key.oznaczajGrajace: true,
             Key.historiaSchowka: true,
             Key.limitHistorii: 200,
             Key.dniHistorii: 7,
@@ -667,6 +672,39 @@ enum Settings {
     static var dniHistoriiSchowka: Int {
         get { max(0, defaults.integer(forKey: Key.dniHistorii)) }
         set { defaults.set(max(0, newValue), forKey: Key.dniHistorii) }
+    }
+
+    // MARK: - Dzwiek
+
+    /// Czy mikser ma swoj skrot i pozycje w menu paska.
+    static var mikserWlaczony: Bool {
+        get { defaults.bool(forKey: Key.mikserWlaczony) }
+        set { defaults.set(newValue, forKey: Key.mikserWlaczony) }
+    }
+
+    /// Czy karty w przelaczniku maja pokazywac, ktory program gra.
+    static var oznaczajGrajace: Bool {
+        get { defaults.bool(forKey: Key.oznaczajGrajace) }
+        set { defaults.set(newValue, forKey: Key.oznaczajGrajace) }
+    }
+
+    /// Domyslnie ⌥⌘S - „sound", obok systemowych skrotow dzwieku i bez kolizji
+    /// z niczym, co program juz zajmuje.
+    static var skrotMiksera: KeyCombo {
+        get {
+            guard let data = defaults.data(forKey: Key.skrotMiksera),
+                  let combo = try? PropertyListDecoder().decode(KeyCombo.self, from: data) else {
+                return KeyCombo(
+                    keyCode: 1,
+                    modifiers: CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue
+                )
+            }
+            return combo
+        }
+        set {
+            guard let data = try? PropertyListEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.skrotMiksera)
+        }
     }
 
     static var limitHistoriiSchowka: Int {

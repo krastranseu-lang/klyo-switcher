@@ -18,6 +18,31 @@ enum HUDLayout {
     static let duzyPodgladSzerokosc: CGFloat = 640
     static let duzyPodgladWysokosc: CGFloat = 420
 
+    /// Ile miejsca zajmie duzy podglad przy TAKIM panelu.
+    ///
+    /// Staly rozmiar byl bledem: przy trzech kolumnach panel ma 618 px, wiec
+    /// podglad 640 px zaslanial go w CALOSCI - nie bylo po czym wodzic mysza.
+    /// Tu zawsze zostaja wolne dwie kolumny kart.
+    static func duzyPodgladRozmiar(kolumny: Int, rzedy: Int) -> CGSize {
+        let szerokoscTresci = CGFloat(kolumny) * cardWidth + CGFloat(max(0, kolumny - 1)) * gap
+        let wysokoscTresci = CGFloat(rzedy) * cardHeight + CGFloat(max(0, rzedy - 1)) * gap
+        let szerokosc = min(duzyPodgladSzerokosc, max(minimalnaSzerokoscPodgladu,
+                                                      szerokoscTresci - miejsceNaDwieKolumny))
+        let wysokosc = min(duzyPodgladWysokosc, max(220, wysokoscTresci))
+        return CGSize(width: szerokosc, height: wysokosc)
+    }
+
+    /// Czy podglad ma gdzie stanac OBOK kart, zamiast na nich.
+    static func podgladMiesciSieObok(kolumny: Int) -> Bool {
+        let szerokoscTresci = CGFloat(kolumny) * cardWidth + CGFloat(max(0, kolumny - 1)) * gap
+        return szerokoscTresci - miejsceNaDwieKolumny >= minimalnaSzerokoscPodgladu
+    }
+
+    /// Ponizej tej szerokosci podglad przestaje byc czytelny - a nieczytelny
+    /// podglad tylko zabiera miejsce.
+    private static let minimalnaSzerokoscPodgladu: CGFloat = 320
+    private static var miejsceNaDwieKolumny: CGFloat { 2 * (cardWidth + gap) }
+
     static func columns(for count: Int, screenWidth: CGFloat) -> Int {
         guard count > 0 else { return 1 }
         let usable = screenWidth - 140 - padding * 2 + gap
@@ -247,10 +272,10 @@ struct SwitcherView: View {
             footer
         }
         .padding(HUDLayout.padding)
-        // Duzy podglad rysuje sie NAD siatka, w srodku panelu. Nie powiekszamy
-        // samej karty ponad miare, bo karta przy krawedzi wyszlaby poza panel
-        // i system by ja przycial - a podglad ma byc CZYTELNY, nie polowiczny.
-        .overlay(duzyPodglad)
+        // Duzy podglad staje po PRZECIWNEJ stronie niz karta pod kursorem, wiec
+        // droga myszy zostaje wolna. Wczesniej lezal na srodku i przechwytywal
+        // mysz - kursor wchodzil na podglad zamiast na sasiednia karte.
+        .overlay(alignment: wyrownaniePodgladu) { duzyPodglad }
         .background(
             ZStack {
                 VisualEffectBackground()
@@ -281,6 +306,24 @@ struct SwitcherView: View {
         .shadow(color: Color.black.opacity(0.26), radius: 38, y: 16)
     }
 
+    /// Po ktorej stronie panelu stanie duzy podglad.
+    ///
+    /// Zasada jest jedna: podglad NIGDY nie stoi tam, gdzie jest kursor. Karta
+    /// pod kursorem i jej sasiadki zostaja odsloniete, wiec mysz ma dokad jechac.
+    /// Gdy panel jest za waski, zeby cokolwiek stanelo obok, podglad wraca na
+    /// srodek - ale wtedy juz nie lapie myszy, wiec karty pod nim dzialaja.
+    private var wyrownaniePodgladu: Alignment {
+        guard HUDLayout.podgladMiesciSieObok(kolumny: model.columns),
+              let podglad = model.duzyPodglad,
+              let miejsce = model.index(of: podglad.id) else { return .center }
+        let kolumna = miejsce % max(1, model.columns)
+        return kolumna < model.columns / 2 ? .trailing : .leading
+    }
+
+    private var rozmiarPodgladu: CGSize {
+        HUDLayout.duzyPodgladRozmiar(kolumny: model.columns, rzedy: max(1, model.rows.count))
+    }
+
     /// O ile rosnie karta pod kursorem - zalezy od wybranego rysunkiem wariantu.
     private var skalaPodKursorem: CGFloat {
         switch Settings.trybPodgladu {
@@ -307,8 +350,9 @@ struct SwitcherView: View {
                 Image(nsImage: podglad.obraz)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: HUDLayout.duzyPodgladSzerokosc,
-                           maxHeight: HUDLayout.duzyPodgladWysokosc)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: rozmiarPodgladu.width,
+                           maxHeight: rozmiarPodgladu.height)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -349,8 +393,16 @@ struct SwitcherView: View {
                         model.onQuit?(index)
                     }
                 }
+                // Podglad znika, gdy kursor zjedzie z karty - ale nie wtedy, gdy
+                // czlowiek siega po gwiazdke albo krzyzyk w tym pasku.
+                .onHover { wewnatrz in
+                    model.kursorNaPodgladzie = wewnatrz
+                    if wewnatrz { model.hoveredID = podglad.id }
+                }
             }
             .padding(14)
+            // Tlo NIE lapie myszy: kursor ma przechodzic przez podglad na karty
+            // pod nim. Klikalny zostaje tylko pasek akcji nizej.
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color.black.opacity(0.55))
@@ -358,24 +410,20 @@ struct SwitcherView: View {
                         VisualEffectBackground()
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     )
+                    .allowsHitTesting(false)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Barwy.obramowanie, lineWidth: 1.4)
             )
             .shadow(color: Color.black.opacity(0.45), radius: 30, y: 12)
-            // Klikniecie w podglad przelacza na to okno - tak samo jak klikniecie
-            // w karte, tylko w cel, ktory widac duzy.
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .onTapGesture {
-                if let index = model.index(of: podglad.id) { model.onPick?(index) }
-            }
-            .onHover { wewnatrz in
-                model.kursorNaPodgladzie = wewnatrz
-                if wewnatrz { model.hoveredID = podglad.id }
-            }
+            .padding(10)
+            // Zadnego `contentShape` ani `onTapGesture` na calym podgladzie:
+            // to one robily z niego sciane. Przelaczenie odbywa sie klikiem w
+            // karte, a podglad tylko pokazuje, co na niej jest.
             .transition(.opacity)
             .animation(.easeOut(duration: 0.12), value: podglad.id)
+            .animation(.easeOut(duration: 0.16), value: wyrownaniePodgladu)
         }
     }
 
@@ -740,7 +788,8 @@ struct SwitcherView: View {
             //   2. CoreAudio - mowi tylko, ze gra PROGRAM, wiec znak dostaje
             //      pierwsza karta tego programu; inaczej glosnik zapalalby sie
             //      na wszystkich pietnastu oknach Chrome naraz i nie mowil nic.
-            if Dzwiek.tytulMowiOGraniu(item.title)
+            if Settings.oznaczajGrajace,
+               Dzwiek.tytulMowiOGraniu(item.title)
                 || Dzwiek.gra(pid: item.pid) && model.pierwszeKarty.contains(item.id)
                 || GlosnoscAplikacji.czyWyciszony(pid: item.pid) {
                 let wyciszony = GlosnoscAplikacji.czyWyciszony(pid: item.pid)

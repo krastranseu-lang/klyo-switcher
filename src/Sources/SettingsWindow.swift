@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
     case general
     case schowek
+    case audio
     case browsers
     case screenshots
     case shortcuts
@@ -15,6 +16,7 @@ enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .general: return "Ogólne"
         case .schowek: return "Schowek"
+        case .audio: return "Dźwięk"
         case .browsers: return "Przeglądarki"
         case .screenshots: return "Zrzuty ekranu"
         case .shortcuts: return "Skróty do programów"
@@ -26,6 +28,7 @@ enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape"
         case .schowek: return "doc.on.clipboard"
+        case .audio: return "speaker.wave.2"
         case .browsers: return "safari"
         case .screenshots: return "camera.viewfinder"
         case .shortcuts: return "command"
@@ -42,6 +45,7 @@ enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .general: return Color(nsColor: .systemGray)
         case .schowek: return Color(nsColor: .systemOrange)
+        case .audio: return Color(nsColor: .systemPink)
         case .browsers: return Color(nsColor: .systemBlue)
         case .screenshots: return Color(nsColor: .systemGreen)
         case .shortcuts: return Color(nsColor: .systemPurple)
@@ -55,6 +59,7 @@ enum SettingsTab: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .general: return "Skrót przełącznika, biurka, wygląd listy, autostart"
         case .schowek: return "Historia kopiowania i wklejanie bez formatowania"
+        case .audio: return "Co gra, wyciszanie po jednym programie, mikser"
         case .browsers: return "Czy pokazywać karty przeglądarek"
         case .screenshots: return "Zrzut zaznaczonego fragmentu i kompresja"
         case .shortcuts: return "Własny klawisz do wybranego programu"
@@ -151,6 +156,16 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var mikserWlaczony: Bool = true {
+        didSet { Settings.mikserWlaczony = mikserWlaczony; SettingsBus.announce() }
+    }
+    @Published var skrotMiksera: KeyCombo = .unset {
+        didSet { Settings.skrotMiksera = skrotMiksera; SettingsBus.announce() }
+    }
+    @Published var oznaczajGrajace: Bool = true {
+        didSet { Settings.oznaczajGrajace = oznaczajGrajace; SettingsBus.announce() }
+    }
+
     @Published var historiaSchowka: Bool = true {
         didSet {
             Settings.historiaSchowkaWlaczona = historiaSchowka
@@ -222,6 +237,9 @@ final class SettingsStore: ObservableObject {
         akcjeWlaczone = Settings.szybkieAkcjeWlaczone
         akcjeModyfikator = Settings.szybkieAkcjeModyfikator
         akcjeCzas = Settings.szybkieAkcjeCzasMs
+        mikserWlaczony = Settings.mikserWlaczony
+        skrotMiksera = Settings.skrotMiksera
+        oznaczajGrajace = Settings.oznaczajGrajace
         historiaSchowka = Settings.historiaSchowkaWlaczona
         limitHistorii = Settings.limitHistoriiSchowka
         dniHistorii = Settings.dniHistoriiSchowka
@@ -488,6 +506,7 @@ struct SettingsView: View {
         switch store.tab {
         case .general: general
         case .schowek: schowek
+        case .audio: audio
         case .browsers: browsers
         case .screenshots: screenshots
         case .shortcuts: shortcuts
@@ -700,6 +719,55 @@ struct SettingsView: View {
     }
 
     // MARK: Schowek
+
+    // MARK: Dzwiek
+
+    private var audio: some View {
+        Group {
+            VStack(alignment: .leading, spacing: 18) {
+                section("Mikser dźwięku") {
+                    Toggle("Skrót i pozycja w menu paska", isOn: $store.mikserWlaczony)
+                    HStack {
+                        Text("Skrót do miksera")
+                        KeyRecorder(combo: store.skrotMiksera) { store.skrotMiksera = $0 }
+                    }
+                    .disabled(!store.mikserWlaczony)
+                    Text("Otwiera listę programów, które właśnie grają. Każdy z nich da się wyciszyć osobno, bez ruszania głośności całego komputera — i tak samo przywrócić.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("W przełączniku okien") {
+                    Toggle("Pokazuj, które okno gra", isOn: $store.oznaczajGrajace)
+                    Text("Karta grającego programu dostaje głośnik — kliknięcie w niego wycisza, ⌘M robi to samo z klawiatury. Przeglądarki same dopisują 🔊 do tytułu grającej karty, więc widać nie tylko KTÓRY program, ale i która karta.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Skąd program wie, co gra") {
+                    Text("Z systemu, nie ze zgadywania: macOS wystawia listę procesów wysyłających dźwięk i to ona jest tu pokazywana. Dźwięk zgłasza zwykle proces pomocniczy (np. „Chrome Helper”), więc program idzie po procesach nadrzędnych aż do tego, który widzisz na ekranie.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !GlosnoscAplikacji.dostepne {
+                        Text("Wyciszanie pojedynczego programu wymaga macOS 14.2 lub nowszego. Na tym systemie widać, co gra, ale wyciszyć da się tylko całość.")
+                            .font(.caption)
+                            .foregroundStyle(Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                section("Czego tu jeszcze nie ma") {
+                    Text("Suwaka głośności OSOBNO dla programu i pasm korektora. Żeby przyciszyć jeden program do 40 procent, trzeba przejąć jego dźwięk, przemnożyć próbki i wypuścić je własnym urządzeniem — to silnik, nie suwak. Suwak bez tego silnika wyglądałby na działający i nie robiłby nic, więc go tu nie ma.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
 
     private var schowek: some View {
         Group {
