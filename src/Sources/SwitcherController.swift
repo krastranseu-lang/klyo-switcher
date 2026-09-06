@@ -437,7 +437,7 @@ final class SwitcherController {
             }
             for (identifier, windowID) in targets {
                 if token.isCancelled { return }
-                guard let image = WindowThumbnails.capture(windowID: windowID, maxWidth: 320) else { continue }
+                guard let image = WindowThumbnails.capture(windowID: windowID, maxWidth: 560) else { continue }
                 batch.append((id: identifier, image: image))
                 if batch.count >= batchSize {
                     flush()

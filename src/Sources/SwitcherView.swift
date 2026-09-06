@@ -336,6 +336,7 @@ struct SwitcherView: View {
         // gwiazdka w rogu sama w sobie jest za mała, żeby rozpoznać ulubiony
         // program kątem oka w rzędzie kilkunastu kart.
         // Znak ulubionego dostaje tylko pierwsze okno danego programu na liscie.
+        let podKursorem = model.hoveredID == item.id
         let pierwszaTegoProgramu = model.pierwszeKarty.contains(item.id)
         let ulubione = pierwszaTegoProgramu ? Ulubione.miejsce(programu: item.bundleID) : nil
         let barwaUlubionego = ulubione.map(PaletaUlubionych.barwa)
@@ -432,8 +433,14 @@ struct SwitcherView: View {
         // czarnego cienia karty wybranej. Świeci zawsze, także gdy karta jest
         // akurat zaznaczona, żeby zaznaczenie ulubionego nie „gubiło" koloru.
         .shadow(color: poswiataBarwa.opacity(poswiataOpacja), radius: poswiataPromien)
-        .scaleEffect(isSelected ? 1.035 : 1.0)
-        .zIndex(isSelected ? 1 : 0)
+        // Karta pod kursorem rosnie na tyle, zeby dalo sie PRZECZYTAC, co w oknie
+        // jest - miniatura 170 px szerokosci pokazuje uklad, ale nie tresc.
+        // Powiekszona wychodzi poza swoje miejsce w siatce, wiec musi rysowac sie
+        // NAD sasiadami (`zIndex`), inaczej wjezdzalaby pod nie.
+        .scaleEffect(podKursorem ? 1.34 : (isSelected ? 1.035 : 1.0))
+        .shadow(color: Color.black.opacity(podKursorem ? 0.34 : 0), radius: podKursorem ? 22 : 0, y: podKursorem ? 10 : 0)
+        .zIndex(podKursorem ? 2 : (isSelected ? 1 : 0))
+        .animation(.spring(response: 0.24, dampingFraction: 0.8), value: podKursorem)
         .contentShape(Rectangle())
         .onTapGesture {
             if let index = model.index(of: item.id) {

@@ -54,7 +54,7 @@ enum PodgladHUD {
         if Settings.showThumbnails, Permissions.screenRecordingGranted {
             var gotowe: [(id: String, image: NSImage)] = []
             for pozycja in okna where pozycja.windowID != 0 {
-                if let obraz = WindowThumbnails.capture(windowID: pozycja.windowID, maxWidth: 320) {
+                if let obraz = WindowThumbnails.capture(windowID: pozycja.windowID, maxWidth: 560) {
                     gotowe.append((id: pozycja.id, image: obraz))
                 }
             }
