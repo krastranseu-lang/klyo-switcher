@@ -44,7 +44,13 @@ final class SwitcherModel: ObservableObject {
     /// skasowanie frazy przywraca wszystko bez ponownego zbierania okien.
     private var wszystkie: [SwitcherItem] = []
     @Published private(set) var fraza: String = ""
-    @Published var items: [SwitcherItem] = []
+    @Published var items: [SwitcherItem] = [] { didSet { przeliczPierwszeKarty() } }
+    /// Karty, ktore sa PIERWSZYM oknem swojego programu na liscie.
+    ///
+    /// Ulubiony jest programem, nie oknem - wiec znak ulubionego nalezy sie jednej
+    /// karcie, a nie kazdemu z pietnastu okien Chrome. Bez tego rozroznienia lista
+    /// zapelnia sie gwiazdkami i przestaja one cokolwiek znaczyc.
+    private(set) var pierwszeKarty: Set<String> = []
     @Published var selection: Int = 0
     @Published var columns: Int = 1
     @Published var hoveredID: String?
@@ -76,6 +82,16 @@ final class SwitcherModel: ObservableObject {
     // MARK: - Szukanie po nazwie
 
     /// Podstawia pelna liste okien i zeruje szukana fraze.
+    private func przeliczPierwszeKarty() {
+        var widziane = Set<String>()
+        var wynik = Set<String>()
+        for pozycja in items {
+            let klucz = pozycja.bundleID.isEmpty ? pozycja.subtitle : pozycja.bundleID
+            if widziane.insert(klucz).inserted { wynik.insert(pozycja.id) }
+        }
+        pierwszeKarty = wynik
+    }
+
     func ustawWszystkie(_ lista: [SwitcherItem]) {
         wszystkie = lista
         fraza = ""
@@ -319,7 +335,9 @@ struct SwitcherView: View {
         // Miejsce w ulubionych decyduje o obramowaniu i poświacie całej karty —
         // gwiazdka w rogu sama w sobie jest za mała, żeby rozpoznać ulubiony
         // program kątem oka w rzędzie kilkunastu kart.
-        let ulubione = Ulubione.miejsce(programu: item.bundleID)
+        // Znak ulubionego dostaje tylko pierwsze okno danego programu na liscie.
+        let pierwszaTegoProgramu = model.pierwszeKarty.contains(item.id)
+        let ulubione = pierwszaTegoProgramu ? Ulubione.miejsce(programu: item.bundleID) : nil
         let barwaUlubionego = ulubione.map(PaletaUlubionych.barwa)
         // Przyciski widac ZAWSZE. Chowanie ich pod kursorem zmuszaloby do szukania
         // ich myszka, a mysz w tym oknie celowo nic nie wybiera.
@@ -353,11 +371,13 @@ struct SwitcherView: View {
         // Drugi wiersz powtarzajacy pierwszy to zmarnowany wiersz. Okno bez wlasnego
         // tytulu nazywa sie tak, jak program - wtedy pod spodem lepiej powiedziec,
         // GDZIE ono jest, niz drugi raz to samo.
+        // Polozenie okna stoi juz na plakietce nad miniatura, wiec powtorzone pod
+        // spodem byloby trzecim napisem o tym samym. Gdy nie ma czego napisac,
+        // wiersz zostaje pusty - pusty wiersz czyta sie szybciej niz powtorzenie.
         let podtytul: String = {
             let tytul = item.title.trimmingCharacters(in: .whitespaces)
             let opis = item.subtitle.trimmingCharacters(in: .whitespaces)
-            if opis.isEmpty || opis == tytul { return item.place.label ?? "" }
-            return opis
+            return opis == tytul ? "" : opis
         }()
 
         return VStack(alignment: .leading, spacing: 7) {
@@ -501,7 +521,7 @@ struct SwitcherView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
 
-            if let miejsce = Ulubione.miejsce(programu: item.bundleID ?? "") {
+            if model.pierwszeKarty.contains(item.id), let miejsce = Ulubione.miejsce(programu: item.bundleID) {
                 gwiazdkaUlubionego(miejsce)
                     .padding(5)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
