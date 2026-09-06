@@ -476,6 +476,21 @@ struct SettingsView: View {
                     // przełącznika okien. Odsyłanie do cudzego panelu jest
                     // przerzucaniem naszej roboty na użytkownika.
                     Toggle("Przełączaj biurko przy wyborze okna", isOn: $store.przelaczajBiurka)
+                    HStack(spacing: 8) {
+                        Button("Skopiuj raport o biurkach") {
+                            // Raport mówi, czy prywatne funkcje systemu w ogóle
+                            // odpowiadają i co dokładnie stało się przy ostatnim
+                            // przeskoku. Bez niego pozostaje zgadywanie.
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(DziennikBiurek.tresc(), forType: .string)
+                            ToastPresenter.shared.show("Raport skopiowany — wklej go w wiadomości.",
+                                                       symbol: "doc.on.clipboard")
+                        }
+                        .controlSize(.small)
+                        Text("Gdy przełączanie biurek nie działa — skopiuj i przyślij.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                     Text(store.przelaczajBiurka
                          ? "Wybór okna z innego biurka przenosi Cię na tamto biurko — tak samo jak kliknięcie ikony w Docku."
                          : "Wyłączone: wybór okna z innego biurka NIE zmieni biurka. To ograniczenie systemu, nie programu — macOS pyta o tę zgodę raz i zapamiętuje ją dla wszystkich programów.")
