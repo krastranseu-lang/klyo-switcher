@@ -93,6 +93,7 @@ enum SondaDzwieku {
             return
         }
         print("gra teraz:")
+        let karty = KartyDzwieku.grajace(wsrodGrajacych: grajace)
         for pid in grajace.sorted() {
             let program = NSRunningApplication(processIdentifier: pid)
             let nazwa = program?.localizedName ?? nazwaProcesu(pid) ?? "?"
@@ -100,6 +101,9 @@ enum SondaDzwieku {
             // pomocnicze - to one zglaszaja dzwiek, a czlowiek szuka programu.
             let widoczny = program?.activationPolicy == .regular ? "  ← widoczny" : ""
             print("  \(pid)\t\(nazwa)\(widoczny)")
+            for karta in karty where karta.pid == pid {
+                print("      └ \(karta.wyciszona ? "[wyciszona] " : "")\(karta.tytul)")
+            }
         }
     }
 

@@ -29,6 +29,10 @@ final class ModelMiksera: ObservableObject {
     }
 
     @Published private(set) var pozycje: [Pozycja] = []
+    /// Grajace karty przegladarek, po programie. To odpowiedz na „pokaz KAZDA
+    /// grajaca zakladke" - CoreAudio widzi tylko caly Chrome, karty widac przez
+    /// Dostepnosc (patrz `KartyDzwieku`).
+    @Published private(set) var karty: [pid_t: [KartaGrajaca]] = [:]
     @Published var glosnoscSystemu: Double = 0.5 {
         didSet {
             guard !wczytywanie else { return }
@@ -82,6 +86,15 @@ final class ModelMiksera: ObservableObject {
         }
         pozycje = wynik.sorted { $0.nazwa.localizedCaseInsensitiveCompare($1.nazwa) == .orderedAscending }
 
+        // Karty pytamy tylko o te przegladarki, ktore naprawde graja - chodzenie
+        // po drzewie Dostepnosci kilkudziesieciu kart co sekunde bez powodu
+        // kosztowaloby wiecej niz cala reszta okna.
+        var noweKarty: [pid_t: [KartaGrajaca]] = [:]
+        for karta in KartyDzwieku.grajace(wsrodGrajacych: grajace) {
+            noweKarty[karta.pid, default: []].append(karta)
+        }
+        karty = noweKarty
+
         wczytywanie = true
         if let poziom = GlosnoscAplikacji.glosnoscSystemu {
             glosnoscSystemu = Double(poziom)
@@ -90,6 +103,17 @@ final class ModelMiksera: ObservableObject {
             glosnoscDostepna = false
         }
         wczytywanie = false
+    }
+
+    /// Wycisza pojedyncza karte - i od razu pyta o stan, bo przegladarka
+    /// przerysowuje swoj pasek dopiero po chwili.
+    func przelaczKarte(_ karta: KartaGrajaca) {
+        KartyDzwieku.przelaczWyciszenie(karta)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.odswiez() }
+    }
+
+    func pokazKarte(_ karta: KartaGrajaca) {
+        KartyDzwieku.pokaz(karta)
     }
 
     func przelacz(_ pid: pid_t) {
@@ -150,7 +174,12 @@ struct MikserView: View {
                 ScrollView {
                     VStack(spacing: 8) {
                         ForEach(model.pozycje) { pozycja in
-                            wiersz(pozycja)
+                            VStack(spacing: 6) {
+                                wiersz(pozycja)
+                                ForEach(model.karty[pozycja.id] ?? []) { karta in
+                                    wierszKarty(karta)
+                                }
+                            }
                         }
                     }
                 }
@@ -258,6 +287,48 @@ struct MikserView: View {
                                                 : Color.white.opacity(0.10),
                               lineWidth: 1)
         )
+    }
+
+    /// Jedna grajaca karta przegladarki.
+    ///
+    /// Wciecie i mniejszy krok mowia, ze to czesc programu wyzej - a nie osobny
+    /// program. Klikniecie w tytul przenosi na te karte, glosnik ja wycisza.
+    private func wierszKarty(_ karta: KartaGrajaca) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.secondary)
+            Button {
+                model.pokazKarte(karta)
+            } label: {
+                Text(karta.tytul)
+                    .font(.system(size: 11.5))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(karta.wyciszona ? Color.secondary : Color.primary)
+            }
+            .buttonStyle(.plain)
+            .help("Przejdź do tej karty")
+            Spacer(minLength: 6)
+            if !karta.wyciszona {
+                Circle().fill(Color.green).frame(width: 5, height: 5)
+            }
+            Button {
+                model.przelaczKarte(karta)
+            } label: {
+                Image(systemName: karta.wyciszona ? "speaker.slash" : "speaker.wave.2")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(karta.wyciszona ? Color.orange : Color.primary)
+                    .frame(width: 26, height: 22)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.10)))
+            }
+            .buttonStyle(.plain)
+            .help(karta.wyciszona ? "Przywróć dźwięk tej karty" : "Wycisz tę kartę")
+        }
+        .padding(.leading, 22)
+        .padding(.trailing, 10)
+        .padding(.vertical, 4)
     }
 
     private func podpis(_ pozycja: ModelMiksera.Pozycja) -> String {
