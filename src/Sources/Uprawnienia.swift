@@ -213,6 +213,7 @@ struct WidokUprawnien: View {
                     } else if !model.gotowe {
                         naprawaZgody
                     }
+                    if !PrzelaczanieBiurek.wlaczone { przelaczanieBiurekPasek }
                     ForEach(RodzajZgody.allCases) { zgoda in
                         wiersz(zgoda)
                     }
@@ -277,6 +278,52 @@ struct WidokUprawnien: View {
     /// Wpis w systemie potrafi utknąć w stanie zepsutym: przełącznik daje się
     /// przesuwać, ale nie zostaje włączony. Jedyne, co pomaga, to usunąć wpis
     /// i pozwolić systemowi zapytać od nowa.
+    /// Ustawienie systemowe, bez którego przełącznik nie zmieni biurka.
+    ///
+    /// To nie jest zgoda — to przełącznik w Ustawieniach systemowych, którym
+    /// człowiek pozwala systemowi zmieniać biurko przy przechodzeniu do programu.
+    /// Gdy jest wyłączony, wybór okna z innego biurka nic nie robi i program
+    /// wygląda na zepsuty, choć działa poprawnie. Dlatego mówimy o tym wprost.
+    private var przelaczanieBiurekPasek: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.on.rectangle.slash")
+                    .foregroundStyle(Color.orange)
+                Text("Przełączanie biurek jest wyłączone w systemie")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            Text("Wybór okna z innego biurka nie przełączy biurka, dopóki nie włączysz tego w Ustawieniach systemowych: Biurko i Dock → Mission Control → „Podczas przełączania się do programu przełącz na biurko z otwartymi oknami tego programu”. To ustawienie systemu, nie programu — żaden przełącznik okien go nie obejdzie.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button {
+                    // Zmieniamy ustawienie systemowe — tylko na wyraźne kliknięcie.
+                    _ = PrzelaczanieBiurek.wlacz()
+                    model.odswiez()
+                } label: {
+                    Label("Włącz przełączanie biurek", systemImage: "wand.and.stars")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.orange)
+                Button {
+                    PrzelaczanieBiurek.otworzUstawienia()
+                } label: {
+                    Text("Wolę zrobić to sam").font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+            }
+            Text("Włączenie przeładuje pasek Dock — okna zostaną na swoich miejscach.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.orange.opacity(0.09)))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.orange.opacity(0.35), lineWidth: 1))
+    }
+
     private var naprawaNagrywania: some View {
         Button {
             naprawiam = true
