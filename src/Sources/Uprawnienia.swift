@@ -68,6 +68,28 @@ enum RodzajZgody: String, CaseIterable, Identifiable {
         case .automatyzacja: Permissions.openAutomationSettings()
         }
     }
+
+    /// Poproszenie SYSTEMU o zgodę — to co innego niż otwarcie Ustawień.
+    ///
+    /// Bez tej prośby macOS nie zakłada programowi wpisu w Nagrywaniu ekranu.
+    /// Człowiek widzi wtedy nazwę na liście i przesuwa przełącznik, ale system
+    /// nie ma czego zapamiętać — przełącznik wraca do wyłączonego i wygląda to
+    /// jak awaria programu. Otwarcie Ustawień samo w sobie NIGDY nie poprosi
+    /// o zgodę; robi to dopiero wywołanie systemowe poniżej.
+    func popros() {
+        switch self {
+        case .dostepnosc: Permissions.requestAccessibility()
+        case .nagrywanie: Permissions.requestScreenRecording()
+        case .automatyzacja: break   // pytana przy pierwszym sięgnięciu po karty
+        }
+    }
+
+    /// Czy zgoda zaczyna obowiązywać dopiero po ponownym uruchomieniu programu.
+    ///
+    /// Nagrywanie ekranu tak działa w macOS: przełącznik można włączyć, ale
+    /// działający proces nadal nie ma dostępu. Kto o tym nie wie, przełącza tam
+    /// i z powrotem i jest pewien, że program jest zepsuty.
+    var wymagaRestartu: Bool { self == .nagrywanie }
 }
 
 /// Jedno miejsce, przez ktore okno uprawnien pyta o karty. Ustawiane przez
@@ -388,6 +410,9 @@ struct WidokUprawnien: View {
                 }
                 .padding(.top, 2)
                 Button {
+                    // Najpierw prośba do systemu — bez niej macOS nie zakłada
+                    // wpisu i przełącznik w Ustawieniach nie ma czego zapamiętać.
+                    zgoda.popros()
                     zgoda.otworzUstawienia()
                 } label: {
                     Label("Otwórz: \(zgoda.gdzie)", systemImage: "arrow.up.forward.app")
@@ -395,6 +420,27 @@ struct WidokUprawnien: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(zgoda.konieczna ? Color.orange : Color.accentColor)
+                if zgoda.wymagaRestartu {
+                    // Bez tego zdania człowiek przesuwa przełącznik, nic się nie
+                    // zmienia i jest pewien, że program jest zepsuty.
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Color.accentColor)
+                        Text("Ta zgoda zaczyna działać dopiero po ponownym uruchomieniu programu. Po włączeniu przełącznika kliknij poniżej.")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 2)
+                    Button {
+                        Permissions.uruchomPonownie()
+                    } label: {
+                        Label("Uruchom program ponownie", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11.5))
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
         .padding(14)
