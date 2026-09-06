@@ -127,6 +127,10 @@ final class SettingsStore: ObservableObject {
     @Published var browserMode: BrowserMode = .windowsOnly { didSet { commit { Settings.browserMode = browserMode } } }
     @Published var spacesMode: SpacesMode = .allDesktops { didSet { commit { Settings.spacesMode = spacesMode } } }
     @Published var tabLimit: Int = 6 { didSet { commit { Settings.tabLimitPerWindow = tabLimit } } }
+    /// Co widac po najechaniu mysza na karte - wybierane rysunkiem, patrz `WyborWygladu`.
+    @Published var trybPodgladu: TrybPodgladu = .duzy {
+        didSet { commit { Settings.trybPodgladu = trybPodgladu } }
+    }
     @Published var thumbnails: Bool = false {
         didSet {
             Settings.showThumbnails = thumbnails
