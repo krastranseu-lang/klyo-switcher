@@ -439,6 +439,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.imagePosition = .imageOnly
             button.toolTip = "\(AppInfo.name) \(AppInfo.version)"
         }
+        odswiezZnacznikZgod()
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -571,6 +572,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func pokazZgody() {
         OknoUprawnienController.shared.pokaz()
+    }
+
+    /// Kropka przy ikonie w pasku, gdy cos czeka na zgode.
+    ///
+    /// Program bez zgod wyglada na dzialajacy - ikona jest, menu sie otwiera -
+    /// a polowa funkcji milczy. Kropka jest jedynym miejscem, ktore czlowiek
+    /// widzi bez otwierania czegokolwiek.
+    func odswiezZnacznikZgod() {
+        guard let przycisk = statusItem?.button else { return }
+        let ile = StanZgod.ile
+        przycisk.image = MenuBarIcon.make(zZnacznikiem: ile > 0)
+        przycisk.toolTip = ile > 0
+            ? "\(AppInfo.name) — \(ile) do załatwienia"
+            : "\(AppInfo.name) \(AppInfo.version)"
     }
 
     @objc private func pokazSzybkieAkcje() {

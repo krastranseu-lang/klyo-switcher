@@ -411,6 +411,14 @@ struct SettingsView: View {
                                 .foregroundStyle(.white)
                         )
                     Text(sekcja.nazwa)
+                    if sekcja == .general, StanZgod.ile > 0 {
+                        Spacer(minLength: 4)
+                        Text("\(StanZgod.ile)")
+                            .font(.system(size: 10, weight: .bold).monospacedDigit())
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(Color.orange))
+                    }
                 }
                 .padding(.vertical, 1)
                 .tag(sekcja)
@@ -457,15 +465,19 @@ struct SettingsView: View {
     /// Jedno spojrzenie zamiast wchodzenia w Ustawienia systemowe: czy program
     /// w ogole moze dzialac.
     private var znacznikGotowosci: some View {
-        let gotowy = Permissions.accessibilityGranted
+        // Liczba zamiast slowa: „2 rzeczy do zalatwienia" mowi wiecej niz
+        // „czeka na zgode", bo widac SKALE zaleglosci, zanim sie ja otworzy.
+        let braki = StanZgod.braki()
+        let gotowy = braki.isEmpty
         return HStack(spacing: 6) {
             Circle()
                 .fill(gotowy ? Color.green : Color.orange)
                 .frame(width: 7, height: 7)
-            Text(gotowy ? "Gotowy do pracy" : "Czeka na zgodę „Dostępność”")
+            Text(gotowy ? "Gotowy do pracy" : "\(braki.count) do załatwienia")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
+        .id(odswiezZgody)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Capsule().fill(Color.primary.opacity(0.05)))
@@ -568,7 +580,32 @@ struct SettingsView: View {
                     Toggle("Uruchamiaj \(AppInfo.name) po zalogowaniu", isOn: $store.launchAtLogin)
                 }
 
-                section("Uprawnienia") {
+                sekcjaZLicznikiem("Uprawnienia", ile: StanZgod.ile) {
+                    if !StanZgod.braki().isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(StanZgod.braki()) { brak in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.orange)
+                                        .frame(width: 18)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(brak.nazwa).font(.system(size: 12.5, weight: .semibold))
+                                        Text(brak.skutek).font(.system(size: 11)).foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer(minLength: 8)
+                                    // PYTAMY system, zamiast odsylac czlowieka do Ustawien.
+                                    Button("Poproś o zgodę") {
+                                        StanZgod.popros(brak) { _ in odswiezZgody &+= 1 }
+                                    }
+                                    .controlSize(.small)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         wierszZgody(
                             nazwa: "Dostępność",
@@ -1005,6 +1042,44 @@ struct SettingsView: View {
             Button("Otwórz…", action: akcja)
                 .controlSize(.small)
         }
+    }
+
+    /// Sekcja z LICZBA rzeczy do zalatwienia w naglowku.
+    ///
+    /// Plakietka istnieje po to, zeby zaleglosc bylo widac, zanim ktos przewinie
+    /// okno - dokladnie tak, jak liczba nieprzeczytanych wiadomosci. Zero znaczy
+    /// „nic nie czeka" i wtedy plakietki nie ma wcale.
+    private func sekcjaZLicznikiem<Content: View>(_ tytul: String, ile: Int,
+                                                 @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Text(tytul)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                if ile > 0 {
+                    Text("\(ile)")
+                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 6).padding(.vertical, 1.5)
+                        .background(Capsule().fill(Color.orange))
+                    Text(ile == 1 ? "do załatwienia" : "do załatwienia")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.orange)
+                }
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(ile > 0 ? Color.orange.opacity(0.45) : Color.clear, lineWidth: 1)
+        )
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

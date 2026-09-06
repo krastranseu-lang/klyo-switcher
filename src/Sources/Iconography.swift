@@ -3,11 +3,21 @@ import AppKit
 /// Ikona w pasku menu rysowana kodem - jako obraz szablonowy sama dostosowuje sie
 /// do jasnego i ciemnego paska oraz do trybu podswietlenia, bez zadnych plikow PNG.
 enum MenuBarIcon {
-    static func make() -> NSImage {
+    /// `zZnacznikiem` dorysowuje kropke w rogu - znak, ze cos czeka na zgode.
+    /// Ikona zostaje szablonowa (dopasowuje sie do jasnego i ciemnego paska),
+    /// wiec kropka tez jest z niej wyciagnieta ksztaltem, a nie kolorem.
+    static func make(zZnacznikiem: Bool = false) -> NSImage {
         let size = NSSize(width: 18, height: 14)
         let image = NSImage(size: size, flipped: false) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return true }
             context.setLineJoin(.round)
+            if zZnacznikiem {
+                // Pierscien w prawym gornym rogu: pelne kolo zlewaloby sie
+                // z oknem pod spodem, a pusty srodek widac na kazdym tle.
+                context.setStrokeColor(NSColor.black.withAlphaComponent(0.95).cgColor)
+                context.setLineWidth(1.6)
+                context.strokeEllipse(in: CGRect(x: 12.4, y: 9.4, width: 4.6, height: 4.6))
+            }
 
             // Dwa okna w tle - sam obrys, coraz slabszy w glab.
             drawWindow(context, rect: CGRect(x: 6.5, y: 5.6, width: 11.0, height: 8.0),
