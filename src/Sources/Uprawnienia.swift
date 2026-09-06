@@ -267,6 +267,26 @@ struct WidokUprawnien: View {
     /// gdy program sam rozpozna, że wpis jest zerwany. Rozpoznanie bywa niepewne
     /// (nowa instalacja nie ma czego porównać), a człowiek patrzący na włączony
     /// przełącznik obok napisu „wyłączona" musi mieć co kliknąć.
+    /// Ratunek dla zgody, która „się nie zaznacza".
+    ///
+    /// Wpis w systemie potrafi utknąć w stanie zepsutym: przełącznik daje się
+    /// przesuwać, ale nie zostaje włączony. Jedyne, co pomaga, to usunąć wpis
+    /// i pozwolić systemowi zapytać od nowa.
+    private var naprawaNagrywania: some View {
+        Button {
+            naprawiam = true
+            _ = Permissions.naprawZgodeNagrywania()
+            Permissions.requestScreenRecording()
+            model.odswiez()
+            naprawiam = false
+        } label: {
+            Label("Przełącznik się nie zaznacza? Napraw wpis", systemImage: "wand.and.stars")
+                .font(.system(size: 11.5))
+        }
+        .buttonStyle(.bordered)
+        .disabled(naprawiam)
+    }
+
     private var naprawaZgody: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("Widzisz w Ustawieniach włączony przełącznik, a tutaj „wyłączona”?")
@@ -420,23 +440,7 @@ struct WidokUprawnien: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(zgoda.konieczna ? Color.orange : Color.accentColor)
-                if zgoda == .nagrywanie {
-                    // Ta zgoda potrafi utknąć w stanie „przełącznik się nie
-                    // zaznacza". Wpis w systemie jest wtedy zepsuty i jedyne, co
-                    // pomaga, to usunąć go i pozwolić systemowi zapytać od nowa.
-                    Button {
-                        naprawiam = true
-                        _ = Permissions.naprawZgodeNagrywania()
-                        Permissions.requestScreenRecording()
-                        model.odswiez()
-                        naprawiam = false
-                    } label: {
-                        Label("Przełącznik się nie zaznacza? Napraw wpis", systemImage: "wand.and.stars")
-                            .font(.system(size: 11.5))
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(naprawiam)
-                }
+                if zgoda == .nagrywanie { naprawaNagrywania }
                 if zgoda.wymagaRestartu {
                     // Bez tego zdania człowiek przesuwa przełącznik, nic się nie
                     // zmienia i jest pewien, że program jest zepsuty.
