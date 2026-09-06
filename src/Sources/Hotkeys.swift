@@ -383,8 +383,12 @@ final class HotkeyRouter {
     private func rozpoznajPrzytrzymanie(_ event: CGEvent) {
         guard akcjeWlaczone, onSzybkieAkcje != nil else { return }
         let flagi = event.flags
-        let inneModyfikatory: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
-            .subtracting(akcjeFlaga)
+        // Suma czterech flag zapisana wprost: literal tablicowy w tym miejscu
+        // Swift bierze za `[Any]`, a nie za zbior opcji.
+        var inneModyfikatory: CGEventFlags = [.maskCommand, .maskAlternate]
+        inneModyfikatory.insert(.maskControl)
+        inneModyfikatory.insert(.maskShift)
+        inneModyfikatory.remove(akcjeFlaga)
         let samNasz = flagi.contains(akcjeFlaga) && flagi.intersection(inneModyfikatory).isEmpty
         let tenKlawisz = event.getIntegerValueField(.keyboardEventKeycode) == akcjeKod
 
