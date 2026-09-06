@@ -49,7 +49,7 @@ enum GlosnoscAplikacji {
         opis.name = "Klyo Switcher — wyciszenie"
         opis.uuid = UUID()
         opis.isPrivate = true
-        opis.muteBehavior = .muted
+        opis.muteBehavior = CATapMuteBehavior.muted
         var tap = AudioObjectID(kAudioObjectUnknown)
         guard AudioHardwareCreateProcessTap(opis, &tap) == noErr, tap != kAudioObjectUnknown else {
             return false
@@ -111,10 +111,15 @@ enum GlosnoscAplikacji {
         return urzadzenie
     }
 
+    /// Adres glosnosci urzadzenia.
+    ///
+    /// `kAudioHardwareServiceDeviceProperty_VirtualMainVolume` nie jest widoczne
+    /// ze Swifta, wiec pytamy o zwykla glosnosc kanalu glownego - to ta sama
+    /// wartosc, ktora pokazuje pasek menu.
     private static func adresGlosnosci() -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(
-            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
-            mScope: kAudioObjectPropertyScopeOutput,
+            mSelector: kAudioDevicePropertyVolumeScalar,
+            mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
     }
