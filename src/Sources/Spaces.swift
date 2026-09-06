@@ -365,17 +365,46 @@ enum SkrotBiurka {
     /// Przechodzi o zadana liczbe biurek. Kazdy krok to jedno nacisniecie
     /// Ctrl+strzalka z przerwa na animacje przejscia - bez niej system gubi
     /// kolejne nacisniecia i konczymy na biurku posrednim.
+    /// Klawisz Control jako klawisz, nie jako flaga doklejona do strzalki.
+    private static let klawiszControl: CGKeyCode = 59
+
     static func przejdzKrokami(_ kroki: Int, zakonczenie: @escaping () -> Void) {
         guard kroki != 0, abs(kroki) <= 12 else { zakonczenie(); return }
         let klawisz = kroki > 0 ? strzalkaWPrawo : strzalkaWLewo
-        wyslij(klawisz: klawisz, pozostalo: abs(kroki), zakonczenie: zakonczenie)
+        // Control WCISNIETY - osobnym zdarzeniem zmiany flag, tak jak z klawiatury.
+        //
+        // To jest cala roznica miedzy „przechodzi" a „nie przechodzi". Zmierzone
+        // 6 wrzesnia 2026 na macOS 26.6, aktywne biurko czytane ze SkyLight:
+        //   sama strzalka z flaga Control       -> biurko [4] zostaje [4]
+        //   Control jako zmiana flag + strzalka -> biurko [4] staje sie [3]
+        // System rozpoznaje swoje skroty po STANIE modyfikatora, a nie po fladze
+        // doklejonej do zdarzenia klawisza. Dopoki wysylalismy sam klawisz, kroki
+        // szly w prozne, a dziennik notowal „przechodze skrotem o -2 kroki"
+        // i zaraz potem nieudane przelaczenie.
+        ustawControl(wcisniety: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            wyslij(klawisz: klawisz, pozostalo: abs(kroki)) {
+                ustawControl(wcisniety: false)
+                // Przejscie miedzy biurkami trwa u macOS niecala sekunde. Pytanie
+                // o cokolwiek wczesniej dostaje odpowiedz sprzed przejscia.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: zakonczenie)
+            }
+        }
+    }
+
+    private static func ustawControl(wcisniety: Bool) {
+        let zrodlo = CGEventSource(stateID: .combinedSessionState)
+        guard let zdarzenie = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawiszControl,
+                                      keyDown: wcisniety) else { return }
+        zdarzenie.type = .flagsChanged
+        zdarzenie.flags = wcisniety ? .maskControl : []
+        Wklejanie.oznacz(zdarzenie)
+        zdarzenie.post(tap: .cghidEventTap)
     }
 
     private static func wyslij(klawisz: CGKeyCode, pozostalo: Int, zakonczenie: @escaping () -> Void) {
         guard pozostalo > 0 else {
-            // Po ostatnim kroku dajemy systemowi domknac animacje, zanim ktokolwiek
-            // sprawdzi, na ktorym biurku jestesmy.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { zakonczenie() }
+            zakonczenie()
             return
         }
         let zrodlo = CGEventSource(stateID: .combinedSessionState)
@@ -385,11 +414,13 @@ enum SkrotBiurka {
         }
         wcisniecie.flags = .maskControl
         puszczenie.flags = .maskControl
+        Wklejanie.oznacz(wcisniecie)
+        Wklejanie.oznacz(puszczenie)
         wcisniecie.post(tap: .cghidEventTap)
         puszczenie.post(tap: .cghidEventTap)
-        // Przejscie miedzy biurkami trwa u macOS ok. 0,2 s. Szybsze ponowienie
+        // Przejscie miedzy biurkami trwa u macOS ok. 0,3 s. Szybsze ponowienie
         // zostaje polkniete i konczymy w polowie drogi.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
             wyslij(klawisz: klawisz, pozostalo: pozostalo - 1, zakonczenie: zakonczenie)
         }
     }

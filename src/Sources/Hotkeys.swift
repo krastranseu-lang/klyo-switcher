@@ -220,6 +220,11 @@ final class HotkeyRouter {
     /// (zwykle pisanie) konczy sie na dwoch porownaniach i zwrocie wskaznika.
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if isSuspended { return Unmanaged.passUnretained(event) }
+        // Wlasnych zdarzen nie przechwytujemy NIGDY. Program wysyla ⌘V (po
+        // przerobieniu tresci i po wybraniu wpisu z historii) oraz Ctrl+strzalki
+        // (przejscie na inne biurko) - gdyby wracaly do nas jako cudze, zamknelyby
+        // sie w petli albo, przy otwartej liscie, zostaly wziete za ruch wyboru.
+        if Wklejanie.nasze(event) { return Unmanaged.passUnretained(event) }
 
         switch type {
         case .keyDown:

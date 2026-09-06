@@ -509,14 +509,30 @@ enum WindowActivator {
             Wierzch.podnies(window: window, windowID: windowID, pid: pid)
             return
         }
+        szukajUchwytu(windowID: windowID, pid: pid, prob: 6)
+    }
+
+    /// Pytanie o okno kilka razy z rzedu.
+    ///
+    /// Po przejsciu na inne biurko Accessibility potrzebuje chwili, zanim zacznie
+    /// oddawac stojace tam okna - a jedno pytanie zadane za wczesnie wyglada
+    /// dokladnie tak samo jak „program nie ma tego okna" i konczylo sie droga
+    /// zapasowa, ktora wyciaga losowe okno programu.
+    private static func szukajUchwytu(windowID: CGWindowID, pid: pid_t, prob: Int) {
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
         if let swieze = axElements(axApp, AXKey.windows)?.first(where: { axWindowID($0) == windowID }) {
-            DziennikBiurek.zapisz("okno \(windowID): uchwyt AX pojawil sie po przejsciu na jego biurko")
+            DziennikBiurek.zapisz("okno \(windowID): uchwyt AX zdobyty (pozostalo prob: \(prob))")
             Wierzch.podnies(window: swieze, windowID: windowID, pid: pid)
-        } else {
-            DziennikBiurek.zapisz("okno \(windowID): Accessibility dalej go nie oddaje - droga zapasowa")
+            return
+        }
+        guard prob > 1 else {
+            DziennikBiurek.zapisz("okno \(windowID): Accessibility go nie oddaje mimo prob - droga zapasowa")
             Wierzch.podniesProces(windowID: windowID, pid: pid)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            szukajUchwytu(windowID: windowID, pid: pid, prob: prob - 1)
         }
     }
 
