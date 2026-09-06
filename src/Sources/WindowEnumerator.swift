@@ -344,13 +344,13 @@ enum WindowActivator {
         // Ta wiedza rozstrzyga o dwóch rzeczach: czy wolno użyć zapasowej aktywacji
         // aplikacji (nie wolno — potrafi wrócić na biurko, z którego wyszliśmy)
         // i czy trzeba naprawić stan biurka źródłowego.
-        let mapa = SpaceMap.map()
+        let mapa = Spaces.map()
         let biurkoZrodlowe = mapa.current.first
         let naInnymBiurku: Bool = {
             guard mapa.isAvailable, biurkoZrodlowe != nil else { return false }
             // Nieznane biurko traktujemy jak „to samo": lepiej użyć zapasowej
             // ścieżki niż pominąć ją tam, gdzie była potrzebna.
-            guard let biurkoOkna = SpaceMap.space(of: windowID) else { return false }
+            guard let biurkoOkna = Spaces.space(of: windowID) else { return false }
             return !mapa.current.contains(biurkoOkna)
         }()
         let programNaWierzchuZrodla = naInnymBiurku
