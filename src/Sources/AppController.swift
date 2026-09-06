@@ -228,6 +228,23 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             odswiez.waitUntilExit()
         }
 
+        // Obraz, z którego przyszliśmy, odłączamy sami — inaczej zostaje na
+        // pulpicie, a ikona w nim kusi, żeby uruchomić program stamtąd jeszcze raz.
+        // Odłączamy DOPIERO po skopiowaniu, żeby nie wyrwać sobie plików spod nóg.
+        if moja.hasPrefix("/Volumes/") {
+            let czesci = moja.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
+            if czesci.count >= 2 {
+                let wolumin = "/Volumes/\(czesci[1])"
+                let odlacz = Process()
+                odlacz.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+                odlacz.arguments = ["detach", wolumin, "-quiet"]
+                odlacz.standardOutput = FileHandle.nullDevice
+                odlacz.standardError = FileHandle.nullDevice
+                // Bez oczekiwania: gdyby wolumin był zajęty, nie ma to wstrzymywać startu.
+                try? odlacz.run()
+            }
+        }
+
         let konfiguracja = NSWorkspace.OpenConfiguration()
         konfiguracja.createsNewApplicationInstance = true
         let grupa = DispatchGroup()
