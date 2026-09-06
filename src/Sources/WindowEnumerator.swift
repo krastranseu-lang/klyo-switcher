@@ -366,18 +366,38 @@ enum WindowActivator {
         AXUIElementPerformAction(window, AXKey.raise as CFString)
 
         if naInnymBiurku {
-            // ŻADNEJ zapasowej aktywacji aplikacji przy przeskoku na inne biurko.
+            // ŻADNEJ zapasowej aktywacji aplikacji przy przeskoku na inne biurko:
+            // `NSRunningApplication.activate()` przy oknie na innym biurku potrafi
+            // przywrócić biurko wyjściowe, czyli cofnąć to, co właśnie zrobiliśmy.
             //
-            // `NSRunningApplication.activate()` na macOS 14+ jest tylko prośbą,
-            // a przy oknie na innym biurku potrafi przywrócić biurko wyjściowe —
-            // czyli cofnąć to, co właśnie zrobiliśmy. Objaw jest dokładnie taki,
-            // jaki zgłosił użytkownik: lista pokazuje okno z innego biurka, wybór
-            // działa, ale biurko się nie zmienia.
-            if let zrodlo = biurkoZrodlowe, let poprzedni = programNaWierzchuZrodla, poprzedni != pid {
-                // Przeskok zapisał nas jako „program na wierzchu" także na biurku
-                // źródłowym. Przywracamy tam ten, który był — inaczej po powrocie
-                // wyskakuje nasze okno zamiast tamtego.
-                WindowFocus.przywrocPoprzednieBiurko(space: zrodlo, pid: poprzedni)
+            // Zamiast tego SPRAWDZAMY, czy przełączenie nastąpiło — i jeśli nie,
+            // przechodzimy tak, jak zrobiłby to człowiek. WindowServer potrafi
+            // odmówić, gdy prośba nie wygląda dla niego na „prosto z ręki
+            // użytkownika"; stąd obserwacja, od której to się zaczęło: kliknięcie
+            // myszą działa, a wybór klawiaturą nie. Naciśnięcie Ctrl+strzałki —
+            // tego samego skrótu, który macOS wykonuje przy geście trzema palcami —
+            // system wykonuje zawsze, bo to zwykłe zdarzenie klawiatury.
+            let biurkoCelu = Spaces.space(of: windowID)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                let poZmianie = Spaces.map()
+                let trzebaPrzejsc = poZmianie.isAvailable && biurkoCelu != nil
+                    && !poZmianie.current.contains(biurkoCelu!)
+                guard trzebaPrzejsc,
+                      let cel = biurkoCelu,
+                      let teraz = poZmianie.current.first,
+                      let kroki = SkrotBiurka.odleglosc(z: teraz, do: cel, mapa: poZmianie) else {
+                    dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                       programNaWierzchuZrodla: programNaWierzchuZrodla)
+                    return
+                }
+                SkrotBiurka.przejdzKrokami(kroki) {
+                    // Samo przejście biurka nie nadaje oknu fokusu — podnosimy je
+                    // jeszcze raz, już na właściwym biurku.
+                    _ = WindowFocus.bring(windowID: windowID, pid: pid)
+                    AXUIElementPerformAction(window, AXKey.raise as CFString)
+                    dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                       programNaWierzchuZrodla: programNaWierzchuZrodla)
+                }
             }
             return
         }
@@ -387,6 +407,19 @@ enum WindowActivator {
         } else {
             activateApp(pid: pid)
         }
+    }
+
+    /// Domkniecie przeskoku: przywraca stan biurka, z ktorego wyszlismy.
+    ///
+    /// Przeskok zapisuje NASZ program jako „ten na wierzchu" takze na biurku
+    /// zrodlowym. Bez tego po powrocie wyskakuje nasze okno zamiast tego, ktore
+    /// tam bylo.
+    private static func dokonczPoPrzeskoku(pid: pid_t, biurkoZrodlowe: SpaceID?,
+                                           programNaWierzchuZrodla: pid_t?) {
+        guard let zrodlo = biurkoZrodlowe,
+              let poprzedni = programNaWierzchuZrodla,
+              poprzedni != pid else { return }
+        WindowFocus.przywrocPoprzednieBiurko(space: zrodlo, pid: poprzedni)
     }
 
     /// Jednorazowa kontrola po chwili (nie polling): jesli WindowServer mimo wszystko nie
