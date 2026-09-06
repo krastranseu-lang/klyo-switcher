@@ -138,6 +138,20 @@ enum Permissions {
         CGRequestScreenCaptureAccess()
     }
 
+    /// Ponowne uruchomienie programu z tej samej sciezki.
+    ///
+    /// Zgoda Nagrywania ekranu obowiazuje dopiero nowy proces - dzialajacy nadal
+    /// nie ma dostepu, choc przelacznik w Ustawieniach jest wlaczony. Zamiast
+    /// kazac czlowiekowi zamykac i otwierac program recznie, robimy to za niego.
+    static func uruchomPonownie() {
+        let cel = URL(fileURLWithPath: Bundle.main.bundlePath)
+        let konfiguracja = NSWorkspace.OpenConfiguration()
+        konfiguracja.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: cel, configuration: konfiguracja) { _, _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.terminate(nil) }
+        }
+    }
+
     static func openAccessibilitySettings() {
         openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
     }
