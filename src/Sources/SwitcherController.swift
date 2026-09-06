@@ -106,6 +106,15 @@ final class SwitcherController {
             self?.usage.noteSelection(windowID: windowID, pid: pid)
         }
 
+        // Przelaczanie biurek wlaczone -> systemowe skroty „Przelacz na Biurko N"
+        // maja byc gotowe, zanim ktos pierwszy raz wybierze okno z innego biurka.
+        // Liczba biurek moze urosnac miedzy startami, stad sprawdzanie przy kazdym.
+        if PrzelaczanieBiurek.wlaczone {
+            DispatchQueue.global(qos: .utility).async {
+                SkrotyBiurekSystemu.wlacz(ile: max(1, Spaces.map().desktopNumbers.count))
+            }
+        }
+
         usage.start()
         browsers.start()
         // Okno zgod nie ma jak zapytac systemu o zgode „Automatyzacja" wprost,

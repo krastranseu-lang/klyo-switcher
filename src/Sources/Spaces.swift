@@ -464,6 +464,108 @@ enum SkrotBiurka {
     }
 }
 
+// MARK: - Systemowe skroty „Przelacz na Biurko N"
+//
+// Pomysl wlasciciela projektu, potwierdzony pomiarem 6 wrzesnia 2026 na macOS 26.6:
+// macOS ma gotowe skroty Ctrl+1…Ctrl+9 „Przelacz na Biurko N" (Klawiatura → Skroty
+// → Mission Control), domyslnie WYLACZONE. Po ich wlaczeniu wyslanie Ctrl+N
+// (Control jako zdarzenie zmiany flag, potem cyfra) powoduje PRAWDZIWE przejscie
+// systemu na wskazane biurko - z animacja, z Mission Control, bez zadnej prywatnej
+// funkcji. Biurko 3 → 1 i z powrotem, za kazdym razem.
+//
+// To zwykle ustawienie systemu, nie zgoda - program wlacza je wtedy, gdy czlowiek
+// wlacza u nas „Przelaczaj biurko przy wyborze okna", i mowi o tym w ustawieniach.
+enum SkrotyBiurekSystemu {
+    /// Identyfikatory w `com.apple.symbolichotkeys`: 118 = Biurko 1, 119 = Biurko 2, …
+    private static let pierwszyIdentyfikator = 118
+    /// Kody klawiszy cyfr 1…9 w gornym rzedzie (te same, co w `HotkeyRouter.digitKeys`).
+    private static let kodyCyfr: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+    private static let modyfikatorControl = 262144
+    private static let klawiszControl: CGKeyCode = 59
+
+    /// Czy skrot dla danego numeru biurka jest wlaczony w systemie.
+    static func wlaczony(numer: Int) -> Bool {
+        guard numer >= 1, numer <= kodyCyfr.count else { return false }
+        guard let wszystkie = UserDefaults(suiteName: "com.apple.symbolichotkeys")?
+                .dictionary(forKey: "AppleSymbolicHotKeys"),
+              let wpis = wszystkie[String(pierwszyIdentyfikator + numer - 1)] as? [String: Any],
+              let wlaczone = wpis["enabled"] as? Bool else { return false }
+        return wlaczone
+    }
+
+    /// Wlacza skroty dla biurek 1…`ile` (najwyzej 9). Zmiana cudzego ustawienia
+    /// systemowego - wolana wylacznie po decyzji czlowieka w ustawieniach.
+    @discardableResult
+    static func wlacz(ile: Int) -> Bool {
+        let liczba = max(1, min(ile, kodyCyfr.count))
+        var udalo = true
+        for numer in 1...liczba where !wlaczony(numer: numer) {
+            let identyfikator = pierwszyIdentyfikator + numer - 1
+            let znak = 48 + numer   // kod znaku „1"…„9"
+            let xml = """
+            <dict><key>enabled</key><true/><key>value</key><dict>\
+            <key>parameters</key><array><integer>\(znak)</integer>\
+            <integer>\(kodyCyfr[numer - 1])</integer><integer>\(modyfikatorControl)</integer></array>\
+            <key>type</key><string>standard</string></dict></dict>
+            """
+            let zapis = Process()
+            zapis.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+            zapis.arguments = ["write", "com.apple.symbolichotkeys", "AppleSymbolicHotKeys",
+                               "-dict-add", String(identyfikator), xml]
+            zapis.standardOutput = FileHandle.nullDevice
+            zapis.standardError = FileHandle.nullDevice
+            guard (try? zapis.run()) != nil else { udalo = false; continue }
+            zapis.waitUntilExit()
+            udalo = udalo && zapis.terminationStatus == 0
+        }
+        // Bez tego system czyta nowe skroty dopiero po ponownym zalogowaniu.
+        let odswiez = Process()
+        odswiez.executableURL = URL(fileURLWithPath:
+            "/System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings")
+        odswiez.arguments = ["-u"]
+        odswiez.standardOutput = FileHandle.nullDevice
+        odswiez.standardError = FileHandle.nullDevice
+        try? odswiez.run()
+        odswiez.waitUntilExit()
+        DziennikBiurek.zapisz("skroty systemowe Ctrl+1…\(liczba) wlaczone: \(udalo ? "tak" : "CZESCIOWO")")
+        return udalo
+    }
+
+    /// Prosi SYSTEM o przejscie na biurko o danym numerze (jak w Mission Control).
+    /// `false`, gdy skrot dla tego numeru nie jest wlaczony - wtedy nic nie wysylamy.
+    @discardableResult
+    static func przejdzNaBiurko(numer: Int) -> Bool {
+        guard numer >= 1, numer <= kodyCyfr.count, wlaczony(numer: numer) else { return false }
+        let zrodlo = CGEventSource(stateID: .combinedSessionState)
+        guard let controlDol = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawiszControl, keyDown: true),
+              let controlGora = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawiszControl, keyDown: false),
+              let cyfraDol = CGEvent(keyboardEventSource: zrodlo, virtualKey: kodyCyfr[numer - 1], keyDown: true),
+              let cyfraGora = CGEvent(keyboardEventSource: zrodlo, virtualKey: kodyCyfr[numer - 1], keyDown: false)
+        else { return false }
+        // Control MUSI isc jako zmiana flag - system rozpoznaje skroty po stanie
+        // modyfikatora, nie po fladze doklejonej do klawisza (zmierzone: bez tego nic).
+        controlDol.type = .flagsChanged; controlDol.flags = .maskControl
+        controlGora.type = .flagsChanged; controlGora.flags = []
+        cyfraDol.flags = .maskControl
+        cyfraGora.flags = .maskControl
+        for zdarzenie in [controlDol, cyfraDol, cyfraGora, controlGora] {
+            Wklejanie.oznacz(zdarzenie)
+        }
+        controlDol.post(tap: .cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            cyfraDol.post(tap: .cghidEventTap)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+                cyfraGora.post(tap: .cghidEventTap)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    controlGora.post(tap: .cghidEventTap)
+                }
+            }
+        }
+        DziennikBiurek.zapisz("prosba do systemu: Ctrl+\(numer) (Przelacz na Biurko \(numer))")
+        return true
+    }
+}
+
 // MARK: - Dziennik: FAKTY zamiast domyslow
 
 /// Zapisuje, co naprawde dzieje sie przy przeskoku miedzy biurkami.

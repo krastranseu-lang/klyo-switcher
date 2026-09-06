@@ -504,9 +504,20 @@ enum WindowActivator {
             // biurka. Gdy nie potwierdzi - zapas w postaci aktywacji programu
             // (droga publiczna), a po niej znow czekanie. Gdy i to nic nie da - nic
             // wiecej, bo kazdy dalszy ruch skonczylby sie przeniesieniem OKNA do nas.
-            let przyjete = WindowFocus.bring(windowID: windowID, pid: pid)
-            DziennikBiurek.zapisz("WindowServer (uklad AltTab): \(przyjete ? "przyjete" : "odmowa")")
-            poczekajNaBiurko(cel, prob: 8) {
+            // Krok 0 - droga SYSTEMOWA, pomysl wlasciciela projektu: skrot „Przelacz na
+            // Biurko N" (Ctrl+N), ktory macOS ma wbudowany, a my wlaczamy go razem
+            // z ustawieniem „Przelaczaj biurko". Zmierzone na 26.6: prawdziwe przejscie,
+            // z animacja i z Mission Control. Gdy skrot dla tego numeru nie jest
+            // wlaczony (biurko bez numeru, wiecej niz 9 biurek) - drogi ponizej.
+            var poproszonoSystem = false
+            if let numer = mapa.desktopNumbers[cel], SkrotyBiurekSystemu.przejdzNaBiurko(numer: numer) {
+                poproszonoSystem = true
+            }
+            let przyjete = poproszonoSystem ? true : WindowFocus.bring(windowID: windowID, pid: pid)
+            DziennikBiurek.zapisz(poproszonoSystem
+                ? "przejscie zlecone systemowi skrotem Ctrl+N"
+                : "WindowServer (uklad AltTab): \(przyjete ? "przyjete" : "odmowa")")
+            poczekajNaBiurko(cel, prob: 10) {
                 podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
                 dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                    programNaWierzchuZrodla: programNaWierzchuZrodla)
