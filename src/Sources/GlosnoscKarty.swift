@@ -80,6 +80,11 @@ enum GlosnoscKarty {
     /// Surowy numer ostatniej odmowy - dla sondy. Bez niego „nie dziala" nie
     /// mowi, KTO odmowil: zgoda, przelacznik w przegladarce czy zly numer karty.
     private(set) static var ostatniBlad: Int = 0
+    /// Programy, o ktore juz pytalismy - systemowe pytanie o zgode ma paść raz,
+    /// a nie przy kazdym ruchu suwaka.
+    private static var przygotowane: Set<pid_t> = []
+
+    static func czyPrzygotowany(pid: pid_t) -> Bool { przygotowane.contains(pid) }
 
     /// Karta jest rozpoznawana po programie i tytule - jej element Dostepnosci
     /// zmienia sie przy kazdym przerysowaniu paska i nie nadaje sie na klucz.
@@ -111,6 +116,44 @@ enum GlosnoscKarty {
     /// glosnikiem dalej znikalaby z listy.
     static func zapamietajWyciszenie(_ karta: KartaGrajaca) { poziomy[klucz(karta)] = 0 }
 
+    // MARK: Otwieranie drogi
+    //
+    // Chrome blokuje na DWOCH bramkach naraz, a program nie prosil o zadna.
+    // Zmierzone: zdarzenie do jednej z instancji wraca z bledem -1743 (brak zgody
+    // na Automatyzacje), a w menu stoi wylaczone „Zezwól na kod JavaScript z
+    // Apple Events". Zadna z tych rzeczy nie zalatwia sie sama i zadna nie da sie
+    // pominac - wiec pytamy o obie, raz, na zyczenie czlowieka.
+
+    enum WynikPrzygotowania {
+        case gotowe
+        case odmowaZgody
+        case javascriptWylaczony
+    }
+
+    /// Prosi o zgode i wlacza przelacznik w przegladarce. Wolane z watku bocznego,
+    /// bo prosba o zgode czeka na czlowieka.
+    @discardableResult
+    static func przygotuj(pid: pid_t) -> WynikPrzygotowania {
+        guard let program = NSRunningApplication(processIdentifier: pid),
+              let identyfikator = program.bundleIdentifier else { return .odmowaZgody }
+
+        var cel = AEAddressDesc()
+        var bajty = Array(identyfikator.utf8)
+        if AECreateDesc(typeApplicationBundleID, &bajty, bajty.count, &cel) == noErr {
+            defer { AEDisposeDesc(&cel) }
+            // `true` = pokaz systemowe pytanie, jesli jeszcze nie bylo.
+            let zgoda = AEDeterminePermissionToAutomateTarget(&cel, typeWildCard, typeWildCard, true)
+            if zgoda != noErr { return .odmowaZgody }
+        }
+
+        switch PrzelacznikJS.stan(pid: pid) {
+        case .wlaczony, .brakPozycji:
+            return .gotowe
+        case .wylaczony:
+            return PrzelacznikJS.wlacz(pid: pid) ? .gotowe : .javascriptWylaczony
+        }
+    }
+
     // MARK: Ustawianie
 
     @discardableResult
@@ -129,6 +172,7 @@ enum GlosnoscKarty {
 
         var ostatni: WynikGlosnosciKarty = .nieObslugiwana
         // Najpierw miejsce wskazane przez Dostepnosc, potem szukanie po kolei.
+        _ = przygotowane.insert(karta.pid)
         var proby: [(okno: Int, karta: Int)] = [(karta.numerOkna, karta.numerKarty)]
         for okno in 1...2 {
             for numer in 1...25 where !(okno == karta.numerOkna && numer == karta.numerKarty) {

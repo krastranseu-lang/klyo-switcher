@@ -54,6 +54,9 @@ enum SondaDzwieku {
                miejsce + 1 < argumenty.count,
                let procent = Float(argumenty[miejsce + 1]),
                let karta = karty.first {
+                if argumenty.contains("--przygotuj") {
+                    print("przygotowanie: \(GlosnoscKarty.przygotuj(pid: karta.pid))")
+                }
                 if argumenty.contains("--wlacz-js") {
                     let przed = PrzelacznikJS.stan(pid: karta.pid)
                     let po = PrzelacznikJS.wlacz(pid: karta.pid)
