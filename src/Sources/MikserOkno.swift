@@ -86,14 +86,18 @@ final class ModelMiksera: ObservableObject {
         }
         pozycje = wynik.sorted { $0.nazwa.localizedCaseInsensitiveCompare($1.nazwa) == .orderedAscending }
 
-        // Karty pytamy tylko o te przegladarki, ktore naprawde graja - chodzenie
-        // po drzewie Dostepnosci kilkudziesieciu kart co sekunde bez powodu
-        // kosztowaloby wiecej niz cala reszta okna.
-        var noweKarty: [pid_t: [KartaGrajaca]] = [:]
-        for karta in KartyDzwieku.grajace(wsrodGrajacych: grajace) {
-            noweKarty[karta.pid, default: []].append(karta)
+        // Karty pytamy tylko o te przegladarki, ktore naprawde graja - i robimy to
+        // POZA glownym watkiem. Zmierzone: przejscie po drzewie Dostepnosci 36 kart
+        // trwa okolo 0,2 s, a okno odswieza sie co sekunde - na glownym watku
+        // byloby to widac jako zacinanie suwaka.
+        let grajaceTeraz = grajace
+        DispatchQueue.global(qos: .userInitiated).async {
+            var noweKarty: [pid_t: [KartaGrajaca]] = [:]
+            for karta in KartyDzwieku.grajace(wsrodGrajacych: grajaceTeraz) {
+                noweKarty[karta.pid, default: []].append(karta)
+            }
+            DispatchQueue.main.async { [weak self] in self?.karty = noweKarty }
         }
-        karty = noweKarty
 
         wczytywanie = true
         if let poziom = GlosnoscAplikacji.glosnoscSystemu {
