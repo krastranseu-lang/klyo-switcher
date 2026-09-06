@@ -517,7 +517,7 @@ struct SettingsView: View {
                             .foregroundStyle(.tertiary)
                     }
                     Text(store.przelaczajBiurka
-                         ? "Wybór okna z innego biurka przenosi Cię na tamto biurko. Program włącza w tym celu systemowe skróty „Przełącz na Biurko 1…9" (Ctrl+1…9, Ustawienia → Klawiatura → Skróty → Mission Control) i nimi prosi macOS o przejście — jak z klawiatury."
+                         ? "Wybór okna z innego biurka przenosi Cię na tamto biurko. Program włącza w tym celu systemowe skróty „Przełącz na Biurko 1…9” (Ctrl+1…9, Ustawienia → Klawiatura → Skróty → Mission Control) i nimi prosi macOS o przejście — jak z klawiatury."
                          : "Wyłączone: wybór okna z innego biurka NIE zmieni biurka. To ograniczenie systemu, nie programu — macOS pyta o tę zgodę raz i zapamiętuje ją dla wszystkich programów.")
                         .font(.caption)
                         .foregroundStyle(store.przelaczajBiurka ? .secondary : Color.orange)
