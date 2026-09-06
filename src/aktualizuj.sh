@@ -63,8 +63,26 @@ powiedz "podpis w porządku"
 # skasowanie pakietu i utworzenie nowego pod tą samą nazwą daje systemowi INNY
 # program — zgoda zostaje przy nieistniejącej kopii i przełącznik w Ustawieniach
 # przestaje cokolwiek znaczyć. Przestawienie nazw zachowuje ciągłość.
-/usr/bin/pkill -x "${nazwa_procesu}" 2>/dev/null || true
-sleep 1
+# Czekamy, aż proces NAPRAWDĘ zniknie, a nie „sekundę na wszelki wypadek".
+#
+# macOS zwraca błąd -47 („plik jest zajęty"), gdy próbujemy otworzyć program,
+# którego pliki są jeszcze w użyciu przez zamykający się proces. Zamknięcie
+# programu z żywym oknem, zgodami i podsłuchem klawiatury trwa dłużej niż
+# sekunda — a wtedy podmiana wchodzi na zajęte pliki i człowiek dostaje
+# „Nie można otworzyć aplikacji".
+czekaj_az_zniknie() {
+  local proba
+  /usr/bin/pkill -x "${nazwa_procesu}" 2>/dev/null || true
+  for proba in $(seq 1 30); do
+    /usr/bin/pgrep -x "${nazwa_procesu}" >/dev/null 2>&1 || { powiedz "stara wersja zamknięta (po ${proba} próbach)"; sleep 1; return 0; }
+    sleep 0.5
+  done
+  # Nie odpuszcza po 15 s — kończymy stanowczo, ale nadal czekamy na zwolnienie.
+  /usr/bin/pkill -9 -x "${nazwa_procesu}" 2>/dev/null || true
+  sleep 2
+  powiedz "stara wersja zamknięta stanowczo"
+}
+czekaj_az_zniknie
 
 rm -rf "${przygotowana}" "${ustepujaca}"
 if ! /bin/cp -R "${nowa}" "${przygotowana}"; then
@@ -93,7 +111,14 @@ powiedz "podmieniono program"
 # Rejestr programów trzyma opis POPRZEDNIEJ kopii; bez odświeżenia polecenie
 # otwarcia trafia w nieaktualny wpis i nie uruchamia nic.
 [ -x "${rejestr}" ] && "${rejestr}" -f "${cel}" 2>/dev/null || true
-sleep 1
+
+# Znacznik pobrania zdejmujemy TAKŻE po podmianie: gdyby został, macOS
+# odesłałby nową wersję do katalogu tymczasowego i zgody przestałyby działać.
+/usr/bin/xattr -dr com.apple.quarantine "${cel}" 2>/dev/null || true
+
+# Krótka pauza na zwolnienie plików po podmianie — bez niej pierwsze otwarcie
+# potrafi trafić w moment, gdy system jeszcze trzyma stary opis programu.
+sleep 2
 
 uruchomione=0
 if [ "${KLYO_BEZ_STARTU:-0}" = "1" ]; then
@@ -102,8 +127,10 @@ if [ "${KLYO_BEZ_STARTU:-0}" = "1" ]; then
   uruchomione=1
   powiedz "pominięto start (tryb sprawdzania)"
 else
-  for proba in 1 2 3 4 5; do
-    /usr/bin/open -n "${cel}" 2>/dev/null || true
+  for proba in 1 2 3 4 5 6 7 8; do
+    # Wynik `open` zapisujemy: to on niesie kod błędu (-47 = pliki jeszcze zajęte),
+    # a bez niego nie wiadomo, czy system odmówił, czy program sam nie wstał.
+    odpowiedz=$(/usr/bin/open -n "${cel}" 2>&1) || powiedz "otwarcie odmówione: ${odpowiedz}"
     sleep 2
     if /usr/bin/pgrep -x "${nazwa_procesu}" >/dev/null 2>&1; then
       powiedz "uruchomiono za ${proba} razem"
