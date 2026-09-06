@@ -313,6 +313,17 @@ struct SwitcherView: View {
         // ich myszka, a mysz w tym oknie celowo nic nie wybiera.
         let showsControls = true
 
+        // Wartosci GOTOWE, nie wyrazenia do rozwiazania w srodku lancucha
+        // modyfikatorow — kompilator SwiftUI dusi sie na zagniezdzonych ternarach
+        // zmieszanych z opcjonalnym `map`, tak jak przy oknie zgod (Uprawnienia.swift).
+        let barwaObramowania: Color = isSelected
+            ? Color.accentColor.opacity(0.95)
+            : (barwaUlubionego ?? Color.white).opacity(barwaUlubionego != nil ? 0.65 : 0.055)
+        let grubosc: CGFloat = isSelected ? 1.8 : (barwaUlubionego != nil ? 1.4 : 1)
+        let poswiataBarwa: Color = barwaUlubionego ?? .clear
+        let poswiataOpacja: Double = barwaUlubionego != nil ? 0.45 : 0
+        let poswiataPromien: CGFloat = barwaUlubionego != nil ? 9 : 0
+
         return VStack(alignment: .leading, spacing: 7) {
             preview(for: item, showsControls: showsControls, isSelected: isSelected)
 
@@ -342,12 +353,7 @@ struct SwitcherView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(
-                    isSelected
-                        ? Color.accentColor.opacity(0.95)
-                        : (barwaUlubionego?.opacity(0.65) ?? Color.white.opacity(0.055)),
-                    lineWidth: isSelected ? 1.8 : (barwaUlubionego != nil ? 1.4 : 1)
-                )
+                .strokeBorder(barwaObramowania, lineWidth: grubosc)
         )
         // Wybrana karta stoi minimalnie blizej patrzacego. Czarny cien rysujemy
         // TYLKO pod nia: cien pod kazda karta zamienilby liste w szarą papkę
@@ -356,8 +362,7 @@ struct SwitcherView: View {
         // Kolorowa poświata ulubionego — osobna warstwa cienia, więc nie gasi
         // czarnego cienia karty wybranej. Świeci zawsze, także gdy karta jest
         // akurat zaznaczona, żeby zaznaczenie ulubionego nie „gubiło" koloru.
-        .shadow(color: (barwaUlubionego ?? .clear).opacity(barwaUlubionego != nil ? 0.45 : 0),
-                radius: barwaUlubionego != nil ? 9 : 0)
+        .shadow(color: poswiataBarwa.opacity(poswiataOpacja), radius: poswiataPromien)
         .scaleEffect(isSelected ? 1.035 : 1.0)
         .zIndex(isSelected ? 1 : 0)
         .contentShape(Rectangle())
