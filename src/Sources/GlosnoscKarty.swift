@@ -37,6 +37,8 @@ enum WynikGlosnosciKarty {
     case javascriptWylaczony
     /// Przegladarka nie pokazuje swoich okien przez AppleScript.
     case brakOkien
+    /// Pod tym numerem siedzi inna strona - szukamy dalej.
+    case niewlasciwaKarta
     case nieObslugiwana
 
     var mozliwe: Bool {
@@ -56,6 +58,8 @@ enum WynikGlosnosciKarty {
             return "Włącz w przeglądarce „Zezwalaj na JavaScript w Apple Events” (Safari: Ustawienia → Programowanie; Chrome: Widok → Programista)."
         case .brakOkien:
             return "Przeglądarka nie pokazuje swoich okien — zdarza się, gdy działa kilka jej instancji naraz."
+        case .niewlasciwaKarta:
+            return "Nie udało się rozpoznać tej karty w przeglądarce."
         case .nieObslugiwana:
             return "Ta przeglądarka nie pozwala sterować głośnością karty z zewnątrz."
         }
@@ -73,6 +77,9 @@ enum GlosnoscKarty {
     /// Gdzie ta karta naprawde siedzi wedlug slownika przegladarki - raz znaleziona
     /// para numerow zostaje, zeby suwak nie szukal jej od nowa przy kazdym ruchu.
     private static var mapowanie: [String: (okno: Int, karta: Int)] = [:]
+    /// Surowy numer ostatniej odmowy - dla sondy. Bez niego „nie dziala" nie
+    /// mowi, KTO odmowil: zgoda, przelacznik w przegladarce czy zly numer karty.
+    private(set) static var ostatniBlad: Int = 0
 
     /// Karta jest rozpoznawana po programie i tytule - jej element Dostepnosci
     /// zmienia sie przy kazdym przerysowaniu paska i nie nadaje sie na klucz.
@@ -139,9 +146,9 @@ enum GlosnoscKarty {
             case .brakZgody, .javascriptWylaczony:
                 // To sa odmowy calej przegladarki - szukanie dalej nic nie da.
                 return wynik
-            case .brakOkien:
-                // Karty o takim numerze nie ma. Kilka pustych pod rzad znaczy,
-                // ze doszlismy do konca listy - dalsze pytanie to strata czasu.
+            case .brakOkien, .niewlasciwaKarta:
+                // Karty o takim numerze nie ma albo siedzi tam inna strona.
+                // Kilka pustych pod rzad znaczy, ze doszlismy do konca listy.
                 pustychPodRzad += 1
                 ostatni = wynik
                 if pustychPodRzad > 6 { return wynik }
@@ -166,6 +173,7 @@ enum GlosnoscKarty {
             js, pid: karta.pid, rodzaj: karta.rodzaj, numerOkna: okno, numerKarty: numerKarty)
 
         if odpowiedz.blad != 0 {
+            ostatniBlad = odpowiedz.blad
             switch odpowiedz.blad {
             case -1743, -1744: return .brakZgody
             case 8, -2700: return .javascriptWylaczony
@@ -174,7 +182,9 @@ enum GlosnoscKarty {
             }
         }
         guard let tekst = odpowiedz.wynik else { return .nieObslugiwana }
-        if tekst == "inna" { return .brakOkien }
+        // „inna" znaczy tylko tyle, ze pod tym numerem siedzi inna strona -
+        // to nie jest usterka, tylko wskazowka, zeby szukac dalej.
+        if tekst == "inna" { return .niewlasciwaKarta }
         guard tekst.hasPrefix("ok") else { return .nieObslugiwana }
         let ile = Int(tekst.dropFirst(2)) ?? 0
         return ile > 0 ? .ustawione(elementow: ile) : .stronaNieOddajeGlosnosci

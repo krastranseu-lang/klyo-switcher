@@ -31,7 +31,8 @@ enum SondaDzwieku {
                 guard let identyfikator = program.bundleIdentifier,
                       BrowserSupport.isSupported(identyfikator) else { continue }
                 let wynik = KartyDzwieku.policz(pid: program.processIdentifier)
-                print("\(program.localizedName ?? identyfikator): okien \(wynik.okna), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE")")
+                let js = PrzelacznikJS.stan(pid: program.processIdentifier)
+                print("\(program.localizedName ?? identyfikator): okien \(wynik.okna), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE"), JavaScript z Apple Events: \(js)")
             }
             if argumenty.contains("--drzewo"),
                let przegladarka = NSWorkspace.shared.runningApplications.first(where: {
@@ -52,12 +53,17 @@ enum SondaDzwieku {
                miejsce + 1 < argumenty.count,
                let procent = Float(argumenty[miejsce + 1]),
                let karta = karty.first {
+                if argumenty.contains("--wlacz-js") {
+                    let przed = PrzelacznikJS.stan(pid: karta.pid)
+                    let po = PrzelacznikJS.wlacz(pid: karta.pid)
+                    print("przelacznik JavaScript: \(przed) -> \(po ? "wlaczony" : "nadal wylaczony")")
+                }
                 let wynik = GlosnoscKarty.ustaw(karta, poziom: procent / 100)
                 switch wynik {
                 case .ustawione(let ile):
                     print("USTAWIONE \(Int(procent))% na: \(karta.tytul) — elementow dzwiekowych: \(ile)")
                 default:
-                    print("NIE UDALO SIE: \(wynik.powod ?? "bez powodu")")
+                    print("NIE UDALO SIE: \(wynik.powod ?? "bez powodu") [surowy blad \(GlosnoscKarty.ostatniBlad)]")
                 }
             }
             exit(0)
