@@ -23,6 +23,10 @@ struct SwitcherItem: Identifiable {
     let place: WindowPlace
     let target: SwitcherTarget
     var thumbnail: NSImage?
+    /// Identyfikator programu — po nim rozpoznajemy, do czego wracasz najczęściej.
+    /// Domyślnie pusty, żeby dodanie pola nie wymagało zmiany wszystkich miejsc,
+    /// które tworzą element listy.
+    var bundleID: String = ""
 }
 
 // MARK: - Spis okien systemowych
@@ -127,7 +131,8 @@ final class WindowEnumerator {
                             isMinimized: false,
                             place: .here,
                             target: .browserTab(tab),
-                            thumbnail: nil
+                            thumbnail: nil,
+                            bundleID: bundleID
                         )
                         let tabRank = appRank + Double(tab.windowIndex) * 0.01 + Double(tab.tabIndex) * 0.0001
                         ranked.append((tabRank, item))
@@ -191,7 +196,8 @@ final class WindowEnumerator {
                         isMinimized: minimized,
                         place: place,
                         target: target,
-                        thumbnail: nil
+                        thumbnail: nil,
+                        bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
                     )
                 ))
             }
@@ -220,7 +226,8 @@ final class WindowEnumerator {
                         isMinimized: minimized,
                         place: .here,
                         target: .window(window),
-                        thumbnail: nil
+                        thumbnail: nil,
+                        bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
                     )
                 ))
             }
@@ -244,7 +251,8 @@ final class WindowEnumerator {
                         isMinimized: minimized,
                         place: .here,
                         target: .window(window),
-                        thumbnail: nil
+                        thumbnail: nil,
+                        bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
                     )
                 ))
             }
