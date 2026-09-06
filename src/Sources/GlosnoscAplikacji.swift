@@ -60,6 +60,8 @@ enum GlosnoscAplikacji {
     /// pokaze prawde zamiast suwaka, ktory tylko udaje.
     @discardableResult
     static func ustawPoziom(pid: pid_t, _ nowy: Float) -> Float {
+        // Wlasnego dzwieku nie regulujemy - patrz `TorDzwieku.init`.
+        guard pid != ProcessInfo.processInfo.processIdentifier else { return 1.0 }
         let docelowy = max(0, min(2.0, nowy))
 
         // Powrot do 100 procent = rozebranie toru. Nie zostawiamy przechwycenia,

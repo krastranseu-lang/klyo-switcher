@@ -65,6 +65,10 @@ final class TorDzwieku {
 
     init?(pid: pid_t, wzmocnienie: Float) {
         guard #available(macOS 14.2, *) else { return nil }
+        // Tor na WLASNY proces to petla: przechwycilby dzwiek, ktory sam
+        // odtwarza, i wyciszyl go u zrodla. Zmierzone na zywym systemie -
+        // po ustawieniu suwaka przy pozycji „Klyo Switcher" milklo wszystko.
+        guard pid != ProcessInfo.processInfo.processIdentifier else { return nil }
         self.pid = pid
         self.wzmocnienie = wzmocnienie
         self.wzmocnienieAtomowe = max(0, min(2.0, wzmocnienie))

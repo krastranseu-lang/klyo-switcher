@@ -45,7 +45,12 @@ enum Dzwiek {
         let teraz = CFAbsoluteTimeGetCurrent()
         if teraz - czas < waznosc { return pamiec }
         czas = teraz
-        pamiec = zbierz()
+        // SIEBIE nie liczymy nigdy. Gdy mikser reguluje czyjas glosnosc, to on
+        // odtwarza ten dzwiek - wiec z punktu widzenia systemu „gra Klyo".
+        // Technicznie prawda, dla czlowieka bez sensu, a w skutkach zgubna:
+        // program pokazywal sie na wlasnej liscie, a suwak przy tej pozycji
+        // zakladal przechwycenie na WLASNYM wyjsciu i wyciszal wszystko naraz.
+        pamiec = zbierz().subtracting([ProcessInfo.processInfo.processIdentifier])
         return pamiec
     }
 
