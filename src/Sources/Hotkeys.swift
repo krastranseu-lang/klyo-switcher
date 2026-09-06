@@ -31,6 +31,7 @@ final class HotkeyRouter {
         static let w: Int64 = 13
         static let q: Int64 = 12
         static let backspace: Int64 = 51
+        static let v: Int64 = 9
     }
 
     /// Klawisze 1…9 w gornym rzedzie - skok do pozycji na liscie.
@@ -50,6 +51,11 @@ final class HotkeyRouter {
     var onScreenshot: (() -> Void)?
     var onHistoriaSchowka: (() -> Void)?
     var onCzystyTekst: (() -> Void)?
+    /// Zwykle ⌘V, gdy uzytkownik wlaczyl przerabianie wklejanej tresci.
+    var onWklejenie: (() -> Void)?
+    /// Przepustka dla NASZEGO wlasnego ⌘V wysylanego po przerobieniu schowka -
+    /// bez niej podsluch przechwycilby je jeszcze raz i program krecilby sie w kolko.
+    var pomijamWklejenie = false
     var onAppShortcut: ((AppShortcut) -> Void)?
     var onCloseSelected: (() -> Void)?
     /// `true` = wymuszone zakonczenie (⌥ razem z Q) - dla aplikacji, ktora nie odpowiada.
@@ -78,6 +84,7 @@ final class HotkeyRouter {
     private var schowekCombo: KeyCombo = .unset
     private var schowekEnabled = false
     private var czystyTekstCombo: KeyCombo = .unset
+    private var wklejanieWlaczone = false
     private var appShortcuts: [AppShortcut] = []
 
     init() {
@@ -107,6 +114,7 @@ final class HotkeyRouter {
         schowekCombo = Settings.skrotHistoriiSchowka
         schowekEnabled = Settings.historiaSchowkaWlaczona
         czystyTekstCombo = Settings.skrotCzystegoTekstu
+        wklejanieWlaczone = Wklejanie.wlaczone
         appShortcuts = Settings.appShortcuts.filter { $0.combo.isSet }
     }
 
@@ -281,6 +289,17 @@ final class HotkeyRouter {
             }
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
                 return Unmanaged.passUnretained(event)
+            }
+
+            // ⌘V samo, bez innych modyfikatorow. Sprawdzane po jednym porownaniu
+            // logicznym, wiec gdy przerabianie jest wylaczone (domyslnie), kosztuje tyle,
+            // co nic. Wlasne, ponownie wyslane ⌘V przepuszczamy bez zmian.
+            if wklejanieWlaczone, keyCode == Key.v, flags.contains(.maskCommand),
+               !flags.contains(.maskShift), !flags.contains(.maskAlternate),
+               !flags.contains(.maskControl) {
+                if pomijamWklejenie { return Unmanaged.passUnretained(event) }
+                onWklejenie?()
+                return nil
             }
 
             if screenshotEnabled, screenshotCombo.matches(keyCode: keyCode, flags: flags) {

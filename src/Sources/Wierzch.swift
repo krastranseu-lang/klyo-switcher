@@ -58,6 +58,50 @@ enum Wierzch {
         }
     }
 
+    /// Okno, ktorego Accessibility nie oddalo przy zbieraniu listy (zdarza sie oknom
+    /// z innych biurek i programom, ktore odpowiadaja wolno). Mamy tylko numer okna.
+    ///
+    /// Wystawiamy program na wierzch i pytamy o jego okna JESZCZE RAZ - aktywny
+    /// program oddaje je czesciej niz uspiony. Gdy dalej ich nie ma, zostaje sama
+    /// aktywacja programu, ale wynik i tak sprawdzamy: dotad ta droga konczyla sie
+    /// cisza i to ona odpowiadala za pozycje listy, ktore „nic nie robily".
+    static func podniesProces(windowID: CGWindowID, pid: pid_t) {
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        AXUIElementSetAttributeValue(axApp, AXKey.frontmost as CFString, kCFBooleanTrue)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPoAktywacji) {
+            if let okna = axElements(axApp, AXKey.windows),
+               let dopasowane = okna.first(where: { axWindowID($0) == windowID }) {
+                DziennikBiurek.zapisz("okno \(windowID) znalezione w Accessibility po wystawieniu programu")
+                wskazOkno(axApp: axApp, window: dopasowane)
+                sprawdzWynik(window: dopasowane, windowID: windowID, pid: pid, proba: 1)
+                return
+            }
+            sprawdzSamProces(windowID: windowID, pid: pid)
+        }
+    }
+
+    /// Sprawdzenie wyniku, gdy nie mamy uchwytu do okna - zostaje pytanie „czy na
+    /// wierzchu jest to, o co prosilismy" i jedna proba drogą systemową.
+    private static func sprawdzSamProces(windowID: CGWindowID, pid: pid_t) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPrzedSprawdzeniem) {
+            if czoloOkna() == windowID {
+                DziennikBiurek.zapisz("przelaczenie na okno \(windowID) (pid \(pid)): UDANE (bez uchwytu AX)")
+                return
+            }
+            WindowActivator.activateApp(pid: pid)
+            DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPrzedSprawdzeniem) {
+                let czolo = czoloOkna()
+                DziennikBiurek.zapisz("""
+                    przelaczenie na okno \(windowID) (pid \(pid)): \
+                    \(czolo == windowID ? "UDANE po aktywacji programu" : "NIEUDANE - na wierzchu \(czolo.map(String.init) ?? "nieznane")") \
+                    (program bez uchwytu AX do tego okna)
+                    """)
+            }
+        }
+    }
+
     /// Trzy polecenia, ktore mowia programowi „to okno jest teraz glowne".
     /// Osobno, bo powtarzamy je przy drugiej probie.
     private static func wskazOkno(axApp: AXUIElement, window: AXUIElement) {

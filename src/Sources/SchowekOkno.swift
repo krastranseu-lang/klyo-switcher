@@ -115,6 +115,21 @@ struct WidokSchowka: View {
         }
         .frame(minWidth: 620, minHeight: 420)
         .background(VisualEffectBackground())
+        // Kolorowa obwodka po wewnetrznej stronie okna. Rysowana NAD trescia, ale
+        // bez przejmowania klikniec - inaczej ramka zjadalaby klikniecia przy
+        // krawedzi listy. Ten sam gradient co w przelaczniku, z jednego miejsca.
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .inset(by: 1)
+                .strokeBorder(Barwy.obramowanie, lineWidth: 1.4)
+                .allowsHitTesting(false)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .inset(by: 2.4)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                .allowsHitTesting(false)
+        )
         .onAppear { polePisania = true }
     }
 

@@ -362,10 +362,13 @@ enum WindowActivator {
             if let windows = axElements(axApp, AXKey.windows),
                let match = windows.first(where: { axWindowID($0) == identifier }) {
                 raise(window: match, windowID: identifier, pid: item.pid, wasMinimized: item.isMinimized)
-            } else if WindowFocus.bring(windowID: identifier, pid: item.pid) {
-                confirmFrontmost(pid: item.pid)
             } else {
-                activateApp(pid: item.pid)
+                // Droga WindowServera zostaje (przelacza biurko), ale jej odpowiedz
+                // nie jest juz dowodem - na macOS 26 zwraca powodzenie i nie robi nic.
+                // Dlatego zaraz po niej idzie wystawienie programu i SPRAWDZENIE wyniku.
+                let przyjete = WindowFocus.bring(windowID: identifier, pid: item.pid)
+                DziennikBiurek.zapisz("okno \(identifier) bez uchwytu AX - WindowServer: \(przyjete ? "przyjete" : "odmowa")")
+                Wierzch.podniesProces(windowID: identifier, pid: item.pid)
             }
         }
     }

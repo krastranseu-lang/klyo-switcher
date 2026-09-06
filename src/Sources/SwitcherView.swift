@@ -205,12 +205,24 @@ struct SwitcherView: View {
                 )
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        // Dwie krawedzie zamiast jednej: bialy wlos tuz przy szkle (to on daje
+        // wrazenie grubosci) i kolorowa obwodka na zewnatrz. Osobno, bo jedna
+        // linia nie umie byc naraz jasna i barwna.
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.35), radius: 30, y: 12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .inset(by: -0.5)
+                .strokeBorder(Barwy.obramowanieDelikatne, lineWidth: 1.2)
+        )
+        // Cien w dwoch warstwach: waski i ciemny tuz pod panelem (odklejenie od
+        // tla) oraz szeroki i miekki (glebia). Jedna warstwa daje albo plaska
+        // ramke, albo szara mgle - nigdy obu naraz.
+        .shadow(color: Color.black.opacity(0.30), radius: 10, y: 4)
+        .shadow(color: Color.black.opacity(0.26), radius: 38, y: 16)
     }
 
     // MARK: - Stopka
@@ -323,6 +335,14 @@ struct SwitcherView: View {
         let poswiataBarwa: Color = barwaUlubionego ?? .clear
         let poswiataOpacja: Double = barwaUlubionego != nil ? 0.45 : 0
         let poswiataPromien: CGFloat = barwaUlubionego != nil ? 9 : 0
+        // Tlo karty jako gradient, nie plaski kolor: plaska plama w kolorze akcentu
+        // wyglada jak zaznaczenie w tabelce, a nie jak karta, ktora stoi wyzej.
+        let gornaBarwa: Color = isSelected ? Color.accentColor.opacity(0.38) : Color.primary.opacity(0.07)
+        let dolnaBarwa: Color = isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.03)
+        let tloKarty = LinearGradient(colors: [gornaBarwa, dolnaBarwa], startPoint: .top, endPoint: .bottom)
+        // Niewybrane karty odrobine przygaszone - wzrok idzie tam, gdzie trzeba,
+        // a lista nie zamienia sie w rownomierna sciane kwadratow.
+        let przejrzystosc: Double = isSelected ? 1.0 : 0.93
 
         return VStack(alignment: .leading, spacing: 7) {
             preview(for: item, showsControls: showsControls, isSelected: isSelected)
@@ -349,12 +369,24 @@ struct SwitcherView: View {
         .frame(width: HUDLayout.cardWidth, height: HUDLayout.cardHeight, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.26) : Color.primary.opacity(0.045))
+                .fill(tloKarty)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .strokeBorder(barwaObramowania, lineWidth: grubosc)
         )
+        // Wlos u gory karty - swiatlo padajace z gory. Bez niego karta na ciemnym
+        // tle wyglada jak wyciety otwor, a nie jak plytka lezaca na szkle.
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .inset(by: 0.5)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(0.20), Color.clear],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1
+                )
+        )
+        .opacity(przejrzystosc)
         // Wybrana karta stoi minimalnie blizej patrzacego. Czarny cien rysujemy
         // TYLKO pod nia: cien pod kazda karta zamienilby liste w szarą papkę
         // i kosztowal klatki na starszym sprzecie.

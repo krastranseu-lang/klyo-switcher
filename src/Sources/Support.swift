@@ -424,6 +424,9 @@ enum Settings {
         static let limitHistorii = "limitHistoriiSchowka"
         static let skrotSchowka = "skrotHistoriiSchowka"
         static let skrotCzystegoTekstu = "skrotCzystegoTekstu"
+        static let wklejajCzysty = "wklejajCzystyTekst"
+        static let wklejajPrzycinaj = "wklejajPrzycinajSpacje"
+        static let wklejajBezDoczepek = "wklejajBezDoczepek"
         static let updateFeed = "updateFeedURL"
         static let autoCheckUpdates = "autoCheckUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -541,6 +544,24 @@ enum Settings {
     static var historiaSchowkaWlaczona: Bool {
         get { defaults.bool(forKey: Key.historiaSchowka) }
         set { defaults.set(newValue, forKey: Key.historiaSchowka) }
+    }
+
+    /// Wklejanie pod ⌘V bez formatowania. Domyslnie WYLACZONE - to zmiana
+    /// zachowania klawisza, ktorego uzywa sie setki razy dziennie, wiec musi byc
+    /// swiadomym wyborem, a nie niespodzianka po aktualizacji.
+    static var wklejajCzystyTekst: Bool {
+        get { defaults.bool(forKey: Key.wklejajCzysty) }
+        set { defaults.set(newValue, forKey: Key.wklejajCzysty) }
+    }
+
+    static var wklejajPrzycinaj: Bool {
+        get { defaults.bool(forKey: Key.wklejajPrzycinaj) }
+        set { defaults.set(newValue, forKey: Key.wklejajPrzycinaj) }
+    }
+
+    static var wklejajBezDoczepek: Bool {
+        get { defaults.bool(forKey: Key.wklejajBezDoczepek) }
+        set { defaults.set(newValue, forKey: Key.wklejajBezDoczepek) }
     }
 
     static var limitHistoriiSchowka: Int {

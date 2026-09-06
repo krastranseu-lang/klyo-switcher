@@ -418,6 +418,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ToastPresenter.shared.show("W schowku nie ma tekstu do wklejenia.", symbol: "text.badge.xmark")
             }
         }
+        switcher.hotkey.onWklejenie = { [weak self] in
+            guard let self else { return }
+            Wklejanie.wykonaj { [weak self] pomijaj in
+                self?.switcher.hotkey.pomijamWklejenie = pomijaj
+            }
+        }
         switcher.hotkey.onAppShortcut = { shortcut in AppLauncher.trigger(shortcut) }
         HotkeySuspension.setter = { [weak router = self.switcher.hotkey] suspended in
             router?.isSuspended = suspended

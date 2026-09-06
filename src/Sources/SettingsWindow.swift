@@ -148,6 +148,18 @@ final class SettingsStore: ObservableObject {
     @Published var skrotSchowka: KeyCombo = .unset { didSet { commit { Settings.skrotHistoriiSchowka = skrotSchowka } } }
     @Published var skrotCzysty: KeyCombo = .unset { didSet { commit { Settings.skrotCzystegoTekstu = skrotCzysty } } }
 
+    // Przerabianie wklejanej tresci. Kazda zmiana idzie od razu do podsluchu
+    // klawiatury (`SettingsBus`), bo to on decyduje, czy ⌘V ma byc przechwytywane.
+    @Published var wklejajCzysty: Bool = false {
+        didSet { Settings.wklejajCzystyTekst = wklejajCzysty; SettingsBus.announce() }
+    }
+    @Published var wklejajPrzycinaj: Bool = false {
+        didSet { Settings.wklejajPrzycinaj = wklejajPrzycinaj; SettingsBus.announce() }
+    }
+    @Published var wklejajBezDoczepek: Bool = false {
+        didSet { Settings.wklejajBezDoczepek = wklejajBezDoczepek; SettingsBus.announce() }
+    }
+
     @Published var screenshotEnabled: Bool = true { didSet { commit { Settings.screenshotEnabled = screenshotEnabled } } }
     @Published var screenshotCombo: KeyCombo = .unset { didSet { commit { Settings.screenshotCombo = screenshotCombo } } }
     @Published var screenshotMaxKB: Int = 1200 { didSet { commit { Settings.screenshotMaxKB = screenshotMaxKB } } }
@@ -188,6 +200,9 @@ final class SettingsStore: ObservableObject {
         limitHistorii = Settings.limitHistoriiSchowka
         skrotSchowka = Settings.skrotHistoriiSchowka
         skrotCzysty = Settings.skrotCzystegoTekstu
+        wklejajCzysty = Settings.wklejajCzystyTekst
+        wklejajPrzycinaj = Settings.wklejajPrzycinaj
+        wklejajBezDoczepek = Settings.wklejajBezDoczepek
         screenshotEnabled = Settings.screenshotEnabled
         screenshotCombo = Settings.screenshotCombo
         screenshotMaxKB = Settings.screenshotMaxKB
@@ -333,6 +348,9 @@ struct KeyRecorder: View {
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
     @State private var szukaj = ""
+    /// Licznik odświeżania zgód. Zgody zmieniają się POZA programem (w Ustawieniach
+    /// systemowych), więc bez pytania co chwilę okno pokazywałoby stan sprzed zmiany.
+    @State private var odswiezZgody = 0
 
     /// Wyszukiwanie po nazwie I po opisie — człowiek pamięta zwykle funkcję
     /// („autostart"), a nie kategorię, w której ją schowaliśmy.
@@ -514,11 +532,32 @@ struct SettingsView: View {
                 }
 
                 section("Uprawnienia") {
-                    HStack(spacing: 10) {
-                        Button("Dostępność…") { Permissions.openAccessibilitySettings() }
-                        Button("Nagrywanie ekranu…") { Permissions.openScreenRecordingSettings() }
-                        Button("Automatyzacja…") { Permissions.openAutomationSettings() }
+                    VStack(alignment: .leading, spacing: 10) {
+                        wierszZgody(
+                            nazwa: "Dostępność",
+                            opis: "Bez niej ⌘ Tab nie dochodzi do programu — system pokazuje swój przełącznik.",
+                            stan: Permissions.accessibilityGranted ? .nadana : .brak,
+                            akcja: Permissions.openAccessibilitySettings
+                        )
+                        Divider().opacity(0.4)
+                        wierszZgody(
+                            nazwa: "Nagrywanie ekranu",
+                            opis: "Bez niej karty pokazują ikony zamiast podglądu okien i nie znają tytułów.",
+                            stan: Permissions.screenRecordingGranted ? .nadana : .brak,
+                            akcja: Permissions.openScreenRecordingSettings
+                        )
+                        Divider().opacity(0.4)
+                        wierszZgody(
+                            nazwa: "Automatyzacja",
+                            opis: "Potrzebna tylko do kart przeglądarek. Systemu nie da się o nią zapytać bez pokazania pytania, więc stanu nie zgadujemy.",
+                            stan: .nieznana,
+                            akcja: Permissions.openAutomationSettings
+                        )
                     }
+                    .id(odswiezZgody)
+                }
+                .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+                    odswiezZgody &+= 1
                 }
             }
         }
@@ -589,6 +628,22 @@ struct SettingsView: View {
     private var schowek: some View {
         Group {
             VStack(alignment: .leading, spacing: 18) {
+                section("Wklejanie pod ⌘V") {
+                    Toggle("Wklejaj bez formatowania", isOn: $store.wklejajCzysty)
+                    Toggle("Przycinaj spacje i puste wiersze na końcach", isOn: $store.wklejajPrzycinaj)
+                    Toggle("Czyść adresy z doczepek śledzących (utm_…, fbclid)", isOn: $store.wklejajBezDoczepek)
+                    Text("""
+                        Zmiana dzieje się w chwili wklejania: program podmienia schowek, \
+                        wysyła ⌘V i od razu oddaje schowkowi to, co w nim było. Skopiowana \
+                        tabelka dalej wklei się z formatowaniem wszędzie indziej. \
+                        Gdy wszystkie trzy są wyłączone — a tak jest domyślnie — program \
+                        nie dotyka ⌘V w ogóle.
+                        """)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 section("Historia kopiowania") {
                     Toggle("Zapamiętuj to, co kopiujesz", isOn: $store.historiaSchowka)
                     HStack {
@@ -801,6 +856,73 @@ struct SettingsView: View {
     }
 
     // MARK: Pomocnicze
+
+    /// Stan pojedynczej zgody. `nieznana` istnieje dlatego, ze o zgodę na
+    /// automatyzację nie da się zapytać po cichu — a zielona kropka postawiona
+    /// „na oko" byłaby atrapą: mówiłaby, że jest dobrze, nie wiedząc tego.
+    enum StanZgody {
+        case nadana
+        case brak
+        case nieznana
+
+        var barwa: Color {
+            switch self {
+            case .nadana: return .green
+            case .brak: return .orange
+            case .nieznana: return .secondary
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .nadana: return "checkmark.circle.fill"
+            case .brak: return "exclamationmark.triangle.fill"
+            case .nieznana: return "questionmark.circle"
+            }
+        }
+
+        var podpis: String {
+            switch self {
+            case .nadana: return "nadana"
+            case .brak: return "brak"
+            case .nieznana: return "nie wiadomo"
+            }
+        }
+    }
+
+    /// Jeden wiersz zgody: widać stan, po co ona jest i gdzie ją włączyć.
+    /// Wartości liczone do zwykłych `let`, bo kompilator SwiftUI dławi się
+    /// długimi łańcuchami z warunkami w środku (patrz Uprawnienia.swift).
+    private func wierszZgody(nazwa: String, opis: String, stan: StanZgody,
+                             akcja: @escaping () -> Void) -> some View {
+        let barwa = stan.barwa
+        let tlo = stan == .nadana ? Color.green.opacity(0.12) : Color.primary.opacity(0.06)
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: stan.symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(barwa)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text(nazwa)
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text(stan.podpis)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(barwa)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(Capsule().fill(tlo))
+                }
+                Text(opis)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button("Otwórz…", action: akcja)
+                .controlSize(.small)
+        }
+    }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 9) {
