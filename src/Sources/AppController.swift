@@ -17,6 +17,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switcher.start()
         HistoriaSchowka.shared.start()
         wireExtraShortcuts()
+        nasluchujProsbyOPrzeniesienie()
         Updater.shared.startAutomaticChecks()
 
         if !Settings.didBootstrapLoginItem {
@@ -38,6 +39,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Okno pokazuje stan KAZDEJ zgody i mowi, co dokladnie kliknac -
             // zamiast alertu, ktory tylko odsyla do Ustawien.
             OknoUprawnienController.shared.pokaz(zgodaMartwa: martwa)
+        }
+    }
+
+    /// Przeniesienie na żądanie — gdy człowiek zgodzi się na nie w oknie
+    /// aktualizacji. Aktualizacja i przeniesienie to ta sama sprawa: bez
+    /// właściwego miejsca na dysku aktualizacja nie ma dokąd zapisać.
+    private func nasluchujProsbyOPrzeniesienie() {
+        NotificationCenter.default.addObserver(
+            forName: .klyoPrzeniesDoProgramow, object: nil, queue: .main
+        ) { [weak self] _ in
+            _ = self?.przeniesNaKanonicznaSciezke(pytaj: false)
         }
     }
 
@@ -118,6 +130,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // a nie nasza wewnetrzna sprawa. Okno musi tez powiedziec DLACZEGO -
         // inaczej brzmi jak kaprys programu, a jest warunkiem dzialania zgod.
         guard zapytajOPrzeniesienie(wTranslokacji: wTranslokacji) else { return false }
+        return przeniesNaKanonicznaSciezke(pytaj: false)
+    }
+
+    /// Samo przeniesienie, bez pytania — pytanie zadaje ten, kto je wywołuje.
+    @discardableResult
+    private func przeniesNaKanonicznaSciezke(pytaj: Bool) -> Bool {
+        let menedzer = FileManager.default
+        let moja = Bundle.main.bundlePath
+        let dom = NSHomeDirectory()
+        let wTranslokacji = moja.contains("/AppTranslocation/")
 
         var katalog = "/Applications"
         if !menedzer.isWritableFile(atPath: katalog) {
