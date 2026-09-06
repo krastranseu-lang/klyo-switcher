@@ -177,8 +177,14 @@ struct WidokUprawnien: View {
             Divider().opacity(0.5)
             ScrollView {
                 VStack(spacing: 10) {
+                    // Najpierw fakt: która kopia programu działa i skąd. Dopiero
+                    // potem stan zgód — inaczej człowiek porównuje dwie rzeczy,
+                    // nie wiedząc, że dotyczą różnych kopii.
+                    skadDzialam
                     if model.zgodaMartwa {
                         zgodaMartwaPasek
+                    } else if !model.gotowe {
+                        naprawaZgody
                     }
                     ForEach(RodzajZgody.allCases) { zgoda in
                         wiersz(zgoda)
@@ -197,6 +203,75 @@ struct WidokUprawnien: View {
     /// i tak nie dziala. To najczesciej zdarza sie po aktualizacji, ktora zmienila
     /// podpis programu: zgoda zostaje przypisana do STAREJ tozsamosci.
     @State private var naprawiam = false
+
+    /// Skąd dokładnie działa ten program i w jakiej wersji.
+    ///
+    /// To jedyny sposób, żeby człowiek mógł porównać to, co widzi w Ustawieniach,
+    /// z tym, co naprawdę jest uruchomione. Gdy w Dostępności stoi ptaszek przy
+    /// „Klyo Switcher", a program mówi „zgoda wyłączona", odpowiedź prawie zawsze
+    /// brzmi: to dwie różne kopie. Bez pokazania ścieżki wygląda to jak awaria
+    /// programu, a jest zwykłym rozjazdem, który widać gołym okiem.
+    private var skadDzialam: some View {
+        let sciezka = Bundle.main.bundlePath
+        let wlasciwa = sciezka == "/Applications/\(AppInfo.name).app"
+            || sciezka == "\(NSHomeDirectory())/Applications/\(AppInfo.name).app"
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: wlasciwa ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(wlasciwa ? Color.green : Color.orange)
+                    .font(.system(size: 11))
+                Text("Działa wersja \(AppInfo.version) z:")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            Text(sciezka)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if !wlasciwa {
+                Text("To nie jest miejsce, w którym program powinien stać. Zgody z Ustawień należą do kopii w katalogu Programy, nie do tej. Przenieś program do Programów i uruchom go stamtąd.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(Color.secondary.opacity(0.07)))
+    }
+
+    /// Naprawa wpisu zgody. Dostępna ZAWSZE, gdy zgody brakuje - nie tylko wtedy,
+    /// gdy program sam rozpozna, że wpis jest zerwany. Rozpoznanie bywa niepewne
+    /// (nowa instalacja nie ma czego porównać), a człowiek patrzący na włączony
+    /// przełącznik obok napisu „wyłączona" musi mieć co kliknąć.
+    private var naprawaZgody: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Widzisz w Ustawieniach włączony przełącznik, a tutaj „wyłączona”?")
+                .font(.system(size: 11.5, weight: .medium))
+            Text("To znaczy, że zgoda należy do innej kopii programu — na przykład poprzedniej wersji albo kopii z numerem w nazwie. Mogę usunąć nieaktualny wpis; system zapyta o zgodę jeszcze raz i wystarczy jedno kliknięcie.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                naprawiam = true
+                if Permissions.naprawZgode() {
+                    Permissions.requestAccessibility()
+                    model.odswiez()
+                }
+                naprawiam = false
+            } label: {
+                Label(naprawiam ? "Naprawiam…" : "Napraw wpis zgody", systemImage: "wand.and.stars")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .disabled(naprawiam)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(Color.secondary.opacity(0.07)))
+    }
 
     private var zgodaMartwaPasek: some View {
         VStack(alignment: .leading, spacing: 9) {
