@@ -258,7 +258,9 @@ enum Permissions {
         var cel = AEAddressDesc()
         let bajty = Array(bundleID.utf8)
         let utworzenie = AECreateDesc(typeApplicationBundleID, bajty, bajty.count, &cel)
-        guard utworzenie == noErr else { return .blad(utworzenie) }
+        // `AECreateDesc` oddaje `OSErr` (16 bitow), a reszta swiata `OSStatus`
+        // (32 bity) - stad przeliczenie, inaczej kompilator odmawia.
+        guard utworzenie == noErr else { return .blad(OSStatus(utworzenie)) }
         defer { AEDisposeDesc(&cel) }
         let wynik = AEDeterminePermissionToAutomateTarget(&cel, typeWildCard, typeWildCard, false)
         if wynik == noErr { return .nadana }
