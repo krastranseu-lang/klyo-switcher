@@ -237,146 +237,36 @@ final class Updater {
     }
 
     /// Podmiana dzieje sie w skrypcie POZA tym procesem, bo program nie moze
-    /// nadpisac samego siebie w trakcie dzialania. Skrypt sprawdza sume kontrolna,
-    /// rozpakowuje paczke, sprawdza podpis Apple i dopiero WTEDY podmienia program.
-    /// Kazdy z tych krokow, gdy zawiedzie, zostawia dotychczasowa wersje nietknieta.
+    /// nadpisac samego siebie w trakcie dzialania.
+    ///
+    /// Skrypt jest OSOBNYM PLIKIEM dolaczonym do programu (`Resources/aktualizuj.sh`),
+    /// a nie napisem w kodzie. To nie jest porzadkowanie: osobny plik da sie
+    /// URUCHOMIC na prawdziwym macOS i sprawdzic, czy dziala. Logika zaszyta
+    /// w napisie jest niesprawdzalna - i wlasnie dlatego aktualizacja potrafila
+    /// zostawic czlowieka bez programu, a jedynym wyjsciem bylo reczne pobranie
+    /// pliku ze strony. Przy kazdej zmianie tego skryptu przebiega sprawdzian
+    /// `sprawdz-aktualizacje.yml`: instaluje starsza wersje, aktualizuje ja do
+    /// nowszej i sprawdza, ze zostal dzialajacy, podpisany program bez kopii
+    /// z numerem w nazwie.
     private func podmien(paczka: URL, oczekiwanaSuma: String?, wersja: String) {
-        let mojaSciezka = Bundle.main.bundlePath
-        let dziennik = FileManager.default.temporaryDirectory.appendingPathComponent("klyo-switcher-update.log").path
-        let suma = oczekiwanaSuma ?? ""
-        let skrypt = """
-        set -e
-        paczka="\(paczka.path)"
-        cel="\(mojaSciezka)"
-        suma="\(suma)"
-        if [ -n "$suma" ]; then
-          policzona=$(/usr/bin/shasum -a 256 "$paczka" | awk '{print $1}')
-          if [ "$policzona" != "$suma" ]; then
-            echo "suma kontrolna sie nie zgadza: $policzona != $suma"
-            exit 1
-          fi
-          echo "suma kontrolna zgodna"
-        fi
-        katalog=$(/usr/bin/mktemp -d)
-        /usr/bin/ditto -x -k "$paczka" "$katalog"
-        nowa=$(/usr/bin/find "$katalog" -maxdepth 1 -name "*.app" | /usr/bin/head -1)
-        [ -n "$nowa" ] || { echo "w paczce nie ma programu"; exit 1; }
-        /usr/bin/codesign --verify --deep --strict "$nowa" || { echo "podpis nowej wersji nie przechodzi kontroli"; exit 1; }
-        /usr/bin/pkill -x KlyoSwitcher || true
-        sleep 1
+        guard let skrypt = Bundle.main.url(forResource: "aktualizuj", withExtension: "sh") else {
+            isInstalling = false
+            ToastPresenter.shared.show("Brakuje skryptu aktualizacji — pobierz nową wersję ze strony.",
+                                       symbol: "exclamationmark.triangle.fill")
+            return
+        }
+        let dziennik = FileManager.default.temporaryDirectory
+            .appendingPathComponent("klyo-switcher-update.log").path
 
-        # Podmiana przez PRZESTAWIENIE nazw, nie przez skasowanie i skopiowanie.
-        #
-        # To nie jest kosmetyka. macOS przypisuje zgody (Dostepnosc, Nagrywanie
-        # ekranu) konkretnemu programowi. Gdy program skasujemy i utworzymy nowy
-        # pod ta sama nazwa, system traktuje go jak przybysza: w Ustawieniach
-        # zostaje ptaszek po poprzedniku, a dzialajaca kopia nie ma prawa nic
-        # zrobic. Uzytkownik widzi wtedy najgorsza z mozliwych rzeczy - wlaczona
-        # zgode i program, ktory mimo to nie dziala.
-        #
-        # Dlatego nowa wersje najpierw kladziemy OBOK, a potem przestawiamy nazwy:
-        # stary schodzi na bok, nowy wchodzi na jego miejsce. Dla systemu to caly
-        # czas ten sam program pod ta sama sciezka, wiec zgody trwaja.
-        # Od tego miejsca sami pilnujemy bledow. Gdyby skrypt mial prawo umrzec
-        # w polowie podmiany, czlowiek zostalby bez programu - a to najgorsze,
-        # co aktualizacja moze zrobic.
-        set +e
-        katalog_celu=$(/usr/bin/dirname "$cel")
-        obok="$katalog_celu/.klyo-nowa-$$.app"
-        ustepujaca="$katalog_celu/.klyo-poprzednia-$$.app"
-        /bin/rm -rf "$obok" "$ustepujaca"
-        /bin/cp -R "$nowa" "$obok"
-        /usr/bin/xattr -dr com.apple.quarantine "$obok" || true
+        // Skrypt musi przezyc zamkniecie tego procesu - dlatego `nohup` i tlo.
+        var polecenie = "nohup /bin/bash \(skrypt.path.shellEscaped())"
+        polecenie += " \(paczka.path.shellEscaped()) \(Bundle.main.bundlePath.shellEscaped())"
+        if let suma = oczekiwanaSuma, !suma.isEmpty { polecenie += " \(suma.shellEscaped())" }
+        polecenie += " > \(dziennik.shellEscaped()) 2>&1 &"
 
-        if [ -e "$cel" ]; then
-          /bin/mv "$cel" "$ustepujaca" || { echo "nie moge odsunac starej wersji"; exit 1; }
-        fi
-        if ! /bin/mv "$obok" "$cel"; then
-          # Gdy cokolwiek pojdzie nie tak, wraca wersja, ktora dzialala.
-          [ -e "$ustepujaca" ] && /bin/mv "$ustepujaca" "$cel"
-          echo "podmiana sie nie powiodla - zostaje poprzednia wersja"
-          exit 1
-        fi
-        # UWAGA: poprzedniej wersji NIE kasujemy tutaj. Zostaje na dysku do chwili,
-        # gdy nowa naprawde wystartuje - inaczej kazdy blad po tym miejscu zostawia
-        # czlowieka bez dzialajacego programu. Kasujemy ja dopiero na samym koncu,
-        # po potwierdzeniu, ze nowa wersja chodzi.
-        /bin/rm -rf "$katalog" "$paczka"
-
-        # macOS trzyma w pamieci opis STAREJ kopii programu (sciezka, podpis,
-        # identyfikator). Zaraz po podmianie `open` potrafi trafic w ten nieaktualny
-        # opis i nie uruchomic nic - program znika, a uzytkownik widzi tylko, ze
-        # "po aktualizacji sie nie wlaczylo". Odswiezenie rejestru to naprawia.
-        rejestr=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-        [ -x "$rejestr" ] && "$rejestr" -f "$cel" 2>/dev/null || true
-        sleep 1
-
-        # Uruchomienie ponawiane: system potrzebuje chwili po podmianie katalogu,
-        # a pierwsza proba potrafi trafic w moment, gdy jeszcze nie jest gotowy.
-        uruchomione=0
-        for proba in 1 2 3 4 5; do
-          if /usr/bin/open -n "$cel" 2>/dev/null; then
-            sleep 2
-            if /usr/bin/pgrep -x KlyoSwitcher > /dev/null 2>&1; then
-              echo "uruchomiono za ${proba} razem"
-              uruchomione=1
-              break
-            fi
-          fi
-          sleep 2
-        done
-
-        if [ "$uruchomione" = "1" ]; then
-          # Nowa wersja chodzi - dopiero TERAZ poprzednia jest zbedna.
-          /bin/rm -rf "$ustepujaca"
-
-          # Kopie z numerem w nazwie („Klyo Switcher 2.app") biora sie stad, ze nowy
-          # plik trafil OBOK starego. Kazda taka kopia to dla systemu osobny program
-          # z osobna zgoda - a uruchamia sie zwykle nie ta, ktorej zgode wlaczyl
-          # czlowiek. Sprzatamy je PO starcie, zeby zaden blad tutaj nie mogl
-          # przeszkodzic w uruchomieniu programu.
-          nazwa_bazowa=$(/usr/bin/basename "$cel" .app)
-          for katalog_kopii in /Applications "$HOME/Applications" "$HOME/Downloads" "$HOME/Desktop"; do
-            [ -d "$katalog_kopii" ] || continue
-            for kopia in "$katalog_kopii/$nazwa_bazowa "*.app; do
-              [ -e "$kopia" ] || continue
-              [ "$kopia" = "$cel" ] && continue
-              reszta=${kopia##*/}
-              reszta=${reszta%.app}
-              reszta=${reszta#"$nazwa_bazowa "}
-              case "$reszta" in
-                ''|*[!0-9]*) continue ;;   # tylko czysty numer, nic innego nie ruszamy
-              esac
-              echo "usuwam zbedna kopie: $kopia"
-              /bin/rm -rf "$kopia" || true
-            done
-          done
-          echo "podmieniono na wersje \(wersja)"
-          exit 0
-        fi
-
-        # Nowa wersja nie wstala. Nie zostawiamy czlowieka z niczym: wraca ta,
-        # ktora dzialala jeszcze minute temu, i to ona ma sie uruchomic.
-        echo "nowa wersja nie wstala - przywracam poprzednia"
-        if [ -e "$ustepujaca" ]; then
-          /bin/rm -rf "$cel"
-          /bin/mv "$ustepujaca" "$cel" || true
-          [ -x "$rejestr" ] && "$rejestr" -f "$cel" 2>/dev/null || true
-          for proba in 1 2 3; do
-            /usr/bin/open -n "$cel" 2>/dev/null || true
-            sleep 2
-            /usr/bin/pgrep -x KlyoSwitcher > /dev/null 2>&1 && { uruchomione=1; break; }
-          done
-        fi
-        if [ "$uruchomione" = "1" ]; then
-          /usr/bin/osascript -e 'display notification "Aktualizacja się nie powiodła — pracujesz na poprzedniej wersji. Nic nie zginęło." with title "Klyo Switcher"' 2>/dev/null || true
-        else
-          /usr/bin/osascript -e 'display notification "Program nie wystartował po aktualizacji. Otwórz Klyo Switcher z katalogu Programy." with title "Klyo Switcher"' 2>/dev/null || true
-        fi
-        """
         let proces = Process()
         proces.executableURL = URL(fileURLWithPath: "/bin/bash")
-        proces.arguments = ["-c", "nohup /bin/bash -c \(skrypt.shellEscaped()) > \(dziennik) 2>&1 &"]
+        proces.arguments = ["-c", polecenie]
         do {
             try proces.run()
         } catch {
@@ -384,7 +274,8 @@ final class Updater {
             ToastPresenter.shared.show("Nie udało się uruchomić aktualizacji.", symbol: "exclamationmark.triangle.fill")
             return
         }
-        ToastPresenter.shared.show("Podmieniam program — za chwilę wystartuje wersja \(wersja).", symbol: "arrow.triangle.2.circlepath")
+        ToastPresenter.shared.show("Podmieniam program — za chwilę wystartuje wersja \(wersja).",
+                                   symbol: "arrow.triangle.2.circlepath")
     }
 
     /// Skrypt startuje odlaczony od naszego procesu: sam buduje nowa wersje, a dopiero po
