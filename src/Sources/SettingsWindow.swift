@@ -546,13 +546,15 @@ struct SettingsView: View {
                             stan: Permissions.screenRecordingGranted ? .nadana : .brak,
                             akcja: Permissions.openScreenRecordingSettings
                         )
-                        Divider().opacity(0.4)
-                        wierszZgody(
-                            nazwa: "Automatyzacja",
-                            opis: "Potrzebna tylko do kart przeglądarek. Systemu nie da się o nią zapytać bez pokazania pytania, więc stanu nie zgadujemy.",
-                            stan: .nieznana,
-                            akcja: Permissions.openAutomationSettings
-                        )
+                        ForEach(zgodyPrzegladarek(), id: \.bundleID) { zgoda in
+                            Divider().opacity(0.4)
+                            wierszZgody(
+                                nazwa: "Automatyzacja — \(zgoda.nazwa)",
+                                opis: zgoda.opis,
+                                stan: zgoda.stan,
+                                akcja: Permissions.openAutomationSettings
+                            )
+                        }
                     }
                     .id(odswiezZgody)
                 }
@@ -888,6 +890,49 @@ struct SettingsView: View {
             case .nieznana: return "nie wiadomo"
             }
         }
+    }
+
+    /// Zgoda na automatyzowanie jednej przeglądarki - stan pytamy systemu, nie zgadujemy.
+    struct ZgodaPrzegladarki: Identifiable {
+        let bundleID: String
+        let nazwa: String
+        let stan: StanZgody
+        let opis: String
+        var id: String { bundleID }
+    }
+
+    /// Wiersze dla przeglądarek, które teraz działają. Program, którego nie ma,
+    /// nie ma stanu zgody — i lepiej go nie pokazywać, niż pokazywać znak zapytania.
+    private func zgodyPrzegladarek() -> [ZgodaPrzegladarki] {
+        var widziane = Set<String>()
+        var wynik: [ZgodaPrzegladarki] = []
+        for app in NSWorkspace.shared.runningApplications {
+            guard let bundleID = app.bundleIdentifier,
+                  BrowserSupport.isSupported(bundleID),
+                  widziane.insert(bundleID).inserted else { continue }
+            let nazwa = app.localizedName ?? bundleID
+            var stan: StanZgody = .nieznana
+            var opis = ""
+            switch Permissions.automatyzacja(bundleID: bundleID) {
+            case .nadana:
+                stan = .nadana
+                opis = "Karty tej przeglądarki mogą trafiać na listę okien."
+            case .odmowa:
+                stan = .brak
+                opis = "Odmowa w Ustawieniach systemowych — karty się nie pokażą, zostaną same okna przeglądarki."
+            case .niePytano:
+                stan = .nieznana
+                opis = "System jeszcze nie pytał — zapyta przy pierwszej próbie odczytania kart."
+            case .nieDziala:
+                stan = .nieznana
+                opis = "Program nie odpowiada — nie ma o co pytać."
+            case .blad(let kod):
+                stan = .nieznana
+                opis = "System odpowiedział błędem \(kod)."
+            }
+            wynik.append(ZgodaPrzegladarki(bundleID: bundleID, nazwa: nazwa, stan: stan, opis: opis))
+        }
+        return wynik.sorted { $0.nazwa < $1.nazwa }
     }
 
     /// Jeden wiersz zgody: widać stan, po co ona jest i gdzie ją włączyć.

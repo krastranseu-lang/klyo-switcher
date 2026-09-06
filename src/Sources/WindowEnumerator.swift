@@ -371,27 +371,27 @@ enum WindowActivator {
             // Accessibility nie oddalo tego okna przy zbieraniu listy - probujemy
             // jeszcze raz teraz; jesli dalej go nie ma, WindowServer i tak potrafi
             // podniesc okno po samym identyfikatorze (razem z biurkiem).
+            // Brak uchwytu AX NIE jest osobnym przypadkiem - to zwykly stan okna
+            // z innego biurka. Accessibility oddaje wylacznie okna z biurka, na
+            // ktorym stoimy (zmierzone: Chrome oddal 1 okno na 31, a program
+            // pomocniczy 0 na 6), wiec pytanie o nie przed przeskokiem musi zawiesc.
+            // Cala reszta - rozpoznanie biurka, przeskok, ponowne pytanie o okno -
+            // jest wspolna, wiec idzie ta sama droga co okna z uchwytem.
             let axApp = AXUIElementCreateApplication(item.pid)
             AXUIElementSetMessagingTimeout(axApp, 0.3)
-            if let windows = axElements(axApp, AXKey.windows),
-               let match = windows.first(where: { axWindowID($0) == identifier }) {
-                raise(window: match, windowID: identifier, pid: item.pid, wasMinimized: item.isMinimized)
-            } else {
-                // Droga WindowServera zostaje (przelacza biurko), ale jej odpowiedz
-                // nie jest juz dowodem - na macOS 26 zwraca powodzenie i nie robi nic.
-                // Dlatego zaraz po niej idzie wystawienie programu i SPRAWDZENIE wyniku.
-                let przyjete = WindowFocus.bring(windowID: identifier, pid: item.pid)
-                DziennikBiurek.zapisz("okno \(identifier) bez uchwytu AX - WindowServer: \(przyjete ? "przyjete" : "odmowa")")
-                Wierzch.podniesProces(windowID: identifier, pid: item.pid)
-            }
+            let match = axElements(axApp, AXKey.windows)?.first(where: { axWindowID($0) == identifier })
+            raise(window: match, windowID: identifier, pid: item.pid, wasMinimized: item.isMinimized)
         }
     }
 
-    private static func raise(window: AXUIElement, windowID: CGWindowID, pid: pid_t, wasMinimized: Bool) {
+    /// `window` moze byc `nil` - i to jest zwykly przypadek, nie awaria.
+    /// Accessibility oddaje okna TYLKO z biezacego biurka, wiec dla celu stojacego
+    /// gdzie indziej uchwytu po prostu nie ma. Zdobywamy go po przeskoku.
+    private static func raise(window: AXUIElement?, windowID: CGWindowID, pid: pid_t, wasMinimized: Bool) {
         if let app = NSRunningApplication(processIdentifier: pid), app.isHidden {
             app.unhide()
         }
-        if wasMinimized {
+        if wasMinimized, let window {
             AXUIElementSetAttributeValue(window, AXKey.minimized as CFString, kCFBooleanFalse)
         }
 
@@ -437,9 +437,11 @@ enum WindowActivator {
         // Najpierw WindowServer (przelacza biurko i oddaje fokus), potem Accessibility,
         // zeby sama aplikacja wiedziala, ktore z jej okien jest teraz glowne.
         let broughtByWindowServer = WindowFocus.bring(windowID: windowID, pid: pid)
-        AXUIElementSetAttributeValue(window, AXKey.main as CFString, kCFBooleanTrue)
-        AXUIElementSetAttributeValue(axApp, AXKey.focusedWindow as CFString, window)
-        AXUIElementPerformAction(window, AXKey.raise as CFString)
+        if let window {
+            AXUIElementSetAttributeValue(window, AXKey.main as CFString, kCFBooleanTrue)
+            AXUIElementSetAttributeValue(axApp, AXKey.focusedWindow as CFString, window)
+            AXUIElementPerformAction(window, AXKey.raise as CFString)
+        }
 
         if naInnymBiurku {
             // ŻADNEJ zapasowej aktywacji aplikacji przy przeskoku na inne biurko:
@@ -464,7 +466,7 @@ enum WindowActivator {
                       let teraz = poZmianie.current.first,
                       let kroki = SkrotBiurka.odleglosc(z: teraz, do: cel, mapa: poZmianie) else {
                     // Biurko sie zgadza (albo nie ma dokad isc) - zostaje samo okno.
-                    Wierzch.podnies(window: window, windowID: windowID, pid: pid)
+                    podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
                     dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                        programNaWierzchuZrodla: programNaWierzchuZrodla)
                     return
@@ -477,7 +479,7 @@ enum WindowActivator {
                     // programu jest już bezpieczna: jesteśmy na docelowym biurku,
                     // więc nie ma jak wrócić na tamto, z którego wyszliśmy.
                     _ = WindowFocus.bring(windowID: windowID, pid: pid)
-                    Wierzch.podnies(window: window, windowID: windowID, pid: pid)
+                    podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
                     dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                        programNaWierzchuZrodla: programNaWierzchuZrodla)
                 }
@@ -491,7 +493,31 @@ enum WindowActivator {
         // ktorej uzytkownik zglosil, ze ⌘⇥ nie przelacza. Prawdziwe przelaczenie
         // robi `Wierzch`, ktory na koniec PYTA system, ktore okno jest na wierzchu.
         DziennikBiurek.zapisz("WindowServer odpowiedzial: \(broughtByWindowServer ? "przyjete" : "odmowa")")
-        Wierzch.podnies(window: window, windowID: windowID, pid: pid)
+        podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+    }
+
+    /// Podniesienie okna, gdy jestesmy juz na jego biurku.
+    ///
+    /// Gdy uchwytu AX nie bylo, pytamy o okno JESZCZE RAZ - i teraz zwykle jest,
+    /// bo Accessibility oddaje okna z biezacego biurka. To jest cala poprawka
+    /// zgloszenia „nie przelacza miedzy biurkami": program pytal o okno przed
+    /// przeskokiem, dostawal nic i konczyl na aktywacji programu, ktora wyciaga
+    /// jego ostatnie okno zamiast wybranego. Przy trzydziestu oknach Chrome
+    /// oznaczalo to trafienie w losowe.
+    private static func podniesPoPrzeskoku(window: AXUIElement?, windowID: CGWindowID, pid: pid_t) {
+        if let window {
+            Wierzch.podnies(window: window, windowID: windowID, pid: pid)
+            return
+        }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        if let swieze = axElements(axApp, AXKey.windows)?.first(where: { axWindowID($0) == windowID }) {
+            DziennikBiurek.zapisz("okno \(windowID): uchwyt AX pojawil sie po przejsciu na jego biurko")
+            Wierzch.podnies(window: swieze, windowID: windowID, pid: pid)
+        } else {
+            DziennikBiurek.zapisz("okno \(windowID): Accessibility dalej go nie oddaje - droga zapasowa")
+            Wierzch.podniesProces(windowID: windowID, pid: pid)
+        }
     }
 
     /// Czy okno jest WIDOCZNE na biezacym biurku.

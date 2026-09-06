@@ -239,6 +239,35 @@ enum Permissions {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
     }
 
+    /// Stan zgody na automatyzowanie KONKRETNEGO programu - bez budzenia pytania.
+    ///
+    /// `AEDeterminePermissionToAutomateTarget` z `askUserIfNeeded: false` odpowiada
+    /// od reki. Poprzednia wersja pisala „nie wiadomo", bo zalozylismy, ze systemu
+    /// nie da sie o to zapytac po cichu - da sie, i to jest jedyna droga, zeby
+    /// powiedziec czlowiekowi prawde zamiast kazac mu zgadywac, czemu karty
+    /// przegladarki sie nie pokazuja.
+    enum StanAutomatyzacji {
+        case nadana
+        case odmowa
+        case niePytano
+        case nieDziala
+        case blad(OSStatus)
+    }
+
+    static func automatyzacja(bundleID: String) -> StanAutomatyzacji {
+        var cel = AEAddressDesc()
+        let bajty = Array(bundleID.utf8)
+        let utworzenie = AECreateDesc(typeApplicationBundleID, bajty, bajty.count, &cel)
+        guard utworzenie == noErr else { return .blad(utworzenie) }
+        defer { AEDisposeDesc(&cel) }
+        let wynik = AEDeterminePermissionToAutomateTarget(&cel, typeWildCard, typeWildCard, false)
+        if wynik == noErr { return .nadana }
+        if wynik == OSStatus(errAEEventNotPermitted) { return .odmowa }
+        if wynik == OSStatus(errAEEventWouldRequireUserConsent) { return .niePytano }
+        if wynik == OSStatus(procNotFound) { return .nieDziala }
+        return .blad(wynik)
+    }
+
     static func openAccessibilitySettings() {
         openSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
     }
