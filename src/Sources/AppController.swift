@@ -29,6 +29,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         sprzatnijStareKopie()
 
+        // Wrocilismy po wlasnym restarcie z okna zgod - pokazujemy je od razu,
+        // zeby czlowiek zobaczyl, czy zgoda zaczela dzialac. Inaczej program
+        // wraca w milczeniu i trzeba szukac okna w menu.
+        if Permissions.wrocDoOknaZgod {
+            Permissions.wrocDoOknaZgod = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                OknoUprawnienController.shared.pokaz()
+            }
+        }
+
         if Permissions.accessibilityGranted {
             // Zapamietujemy, ze zgoda dziala. Gdy kiedys przestanie, bedziemy
             // wiedziec, ze to zerwane powiazanie, a nie brak zgody.
