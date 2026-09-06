@@ -100,6 +100,12 @@ final class SwitcherController {
             self?.usage.attachPendingObservers()
         }
 
+        // Kolejnosc kart zmienia sie wylacznie po POTWIERDZONYM przelaczeniu -
+        // patrz komentarz w `switchTo`.
+        Wierzch.poUdanymPrzelaczeniu = { [weak self] windowID, pid in
+            self?.usage.noteSelection(windowID: windowID, pid: pid)
+        }
+
         usage.start()
         browsers.start()
         // Okno zgod nie ma jak zapytac systemu o zgode „Automatyzacja" wprost,
@@ -302,9 +308,19 @@ final class SwitcherController {
     }
 
     private func switchTo(_ item: SwitcherItem) {
-        // Historia uzycia aktualizuje sie od razu, a nie dopiero gdy system
-        // przesle powiadomienie o zmianie aktywnej aplikacji.
-        usage.noteSelection(windowID: item.windowID, pid: item.pid)
+        // Historia uzycia zapisuje sie DOPIERO po potwierdzonym przelaczeniu -
+        // robi to `Wierzch.poUdanymPrzelaczeniu`, wpiete w `start()`.
+        //
+        // Wczesniej zapisywalismy sam ZAMIAR, wiec kolejnosc kart zmieniala sie
+        // takze po probie, ktora sie nie powiodla. Objaw zglosil wlasciciel:
+        // „jak zrobie ⌘⇥ i szybko otworze jeszcze raz, widze, jak okienko zmienia
+        // pozycje - musi juz stac na pierwszej".
+        //
+        // Karta przegladarki nie ma numeru okna, wiec nie ma czego sprawdzic -
+        // dla niej zapisujemy od razu, jak dotad.
+        if item.windowID == 0 {
+            usage.noteSelection(windowID: 0, pid: item.pid)
+        }
         // Każdy wybór buduje obraz tego, do czego naprawdę wracasz — stąd biorą
         // się gwiazdki na kartach.
         Ulubione.zapiszWybor(identyfikator: item.bundleID)

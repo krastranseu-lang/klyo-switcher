@@ -23,6 +23,14 @@ import ApplicationServices
 // funkcja zwrocila zero, to sie udalo", kosztowalo tydzien szukania nie tam.
 
 enum Wierzch {
+    /// Wywolywane WYLACZNIE po potwierdzonym przelaczeniu.
+    ///
+    /// Historia uzycia decyduje o kolejnosci kart, wiec zapisanie wyboru, ktory
+    /// sie nie powiodl, przestawia liste bez powodu: przy szybkim ponownym ⌘⇥
+    /// karty widocznie skacza, a pierwsza pozycja nie jest tam, gdzie czlowiek
+    /// jej sie spodziewa. Zapisujemy dopiero fakt, nie zamiar.
+    static var poUdanymPrzelaczeniu: ((CGWindowID, pid_t) -> Void)?
+
     /// Ile czekamy, zanim wydamy oknu polecenie podniesienia. Aplikacja potrzebuje
     /// chwili, zeby stac sie ta na wierzchu; bez tej przerwy podniesienie trafia
     /// w program, ktory jeszcze nie jest aktywny, i przepada.
@@ -88,6 +96,7 @@ enum Wierzch {
         DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPrzedSprawdzeniem) {
             if czoloOkna() == windowID {
                 DziennikBiurek.zapisz("przelaczenie na okno \(windowID) (pid \(pid)): UDANE (bez uchwytu AX)")
+                poUdanymPrzelaczeniu?(windowID, pid)
                 return
             }
             WindowActivator.activateApp(pid: pid)
@@ -98,6 +107,7 @@ enum Wierzch {
                     \(czolo == windowID ? "UDANE po aktywacji programu" : "NIEUDANE - na wierzchu \(czolo.map(String.init) ?? "nieznane")") \
                     (program bez uchwytu AX do tego okna)
                     """)
+                if czolo == windowID { poUdanymPrzelaczeniu?(windowID, pid) }
             }
         }
     }
@@ -122,6 +132,7 @@ enum Wierzch {
             let czolo = czoloOkna()
             if czolo == windowID {
                 DziennikBiurek.zapisz("przelaczenie na okno \(windowID) (pid \(pid)): UDANE (proba \(proba))")
+                poUdanymPrzelaczeniu?(windowID, pid)
                 return
             }
             switch proba {
