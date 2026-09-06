@@ -38,14 +38,42 @@ enum PrzelacznikJS {
         guard let pozycja = znajdz(pid: pid) else { return false }
         let znacznik = (axCopy(pozycja, "AXMenuItemMarkChar") as? String) ?? ""
         if !znacznik.isEmpty { return true }
-        // Menu trzeba OTWORZYC, zeby dalo sie w nim kliknac - samo `AXPress` na
-        // ukrytej pozycji nie zadziala w kazdej wersji. Rodzic otwiera sie i
-        // zamyka sam po wyborze.
-        guard AXUIElementPerformAction(pozycja, kAXPressAction as CFString) == .success else {
-            return false
+        // Menu trzeba OTWORZYC, zeby dalo sie w nim kliknac. Zmierzone: samo
+        // nacisniecie ukrytej pozycji konczy sie niczym - „wylaczony ->  nadal
+        // wylaczony". Otwieramy wiec cala droge: pozycja paska, potem podmenu.
+        for rodzic in droga(do: pozycja).reversed() {
+            AXUIElementPerformAction(rodzic, kAXPressAction as CFString)
+            Thread.sleep(forTimeInterval: 0.18)
         }
-        Thread.sleep(forTimeInterval: 0.3)
-        return stan(pid: pid) == .wlaczony
+        AXUIElementPerformAction(pozycja, kAXPressAction as CFString)
+        Thread.sleep(forTimeInterval: 0.35)
+        let wlaczony = stan(pid: pid) == .wlaczony
+        if !wlaczony { zamknijMenu() }
+        return wlaczony
+    }
+
+    /// Pozycje menu, ktore trzeba nacisnac, zeby dojsc do tej najglebszej -
+    /// od niej w gore, do paska menu.
+    private static func droga(do pozycja: AXUIElement) -> [AXUIElement] {
+        var wynik: [AXUIElement] = []
+        var biezacy = pozycja
+        for _ in 0..<6 {
+            guard let rodzic = axCopy(biezacy, kAXParentAttribute),
+                  CFGetTypeID(rodzic) == AXUIElementGetTypeID() else { break }
+            let element = rodzic as! AXUIElement
+            let rola = (axCopy(element, kAXRoleAttribute) as? String) ?? ""
+            if rola == kAXMenuBarRole { break }
+            // Menu samo w sobie sie nie naciska - naciska sie pozycje, ktora je otwiera.
+            if rola == kAXMenuItemRole || rola == kAXMenuBarItemRole { wynik.append(element) }
+            biezacy = element
+        }
+        return wynik
+    }
+
+    private static func zamknijMenu() {
+        guard let zrodlo = CGEventSource(stateID: .hidSystemState) else { return }
+        CGEvent(keyboardEventSource: zrodlo, virtualKey: 53, keyDown: true)?.post(tap: .cghidEventTap)
+        CGEvent(keyboardEventSource: zrodlo, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
     }
 
     /// Szuka pozycji w PASKU MENU programu - nie w menu kontekstowym.

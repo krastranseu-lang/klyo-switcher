@@ -37,6 +37,39 @@ enum ZdarzeniaPrzegladarki {
         return rekord.coerce(toDescriptorType: typeObjectSpecifier) ?? rekord
     }
 
+    /// Ile okien widzi w tym procesie SLOWNIK przegladarki (a nie Dostepnosc).
+    ///
+    /// To rozstrzyga spor, ktory inaczej zostaje domyslem: Dostepnosc pokazuje
+    /// okna, a polecenie odpowiada „nieprawidlowy indeks". Jesli tu wyjdzie zero,
+    /// znaczy to, ze przegladarka nie oddaje swoich okien skryptom - i zadne
+    /// adresowanie tego nie zmieni.
+    static func ileOkien(pid: pid_t) -> (ile: Int, blad: Int) {
+        let cel = NSAppleEventDescriptor(processIdentifier: pid)
+        let zdarzenie = NSAppleEventDescriptor.appleEvent(
+            withEventClass: AEEventClass(kAECoreSuite), eventID: AEEventID(kAECountElements),
+            targetDescriptor: cel, returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID))
+        let wszystkie = NSAppleEventDescriptor.record()
+        wszystkie.setDescriptor(NSAppleEventDescriptor(typeCode: kod("cwin")),
+                                forKeyword: AEKeyword(keyAEDesiredClass))
+        wszystkie.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(formAbsolutePosition)),
+                                forKeyword: AEKeyword(keyAEKeyForm))
+        wszystkie.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(kAEAll)),
+                                forKeyword: AEKeyword(keyAEKeyData))
+        wszystkie.setDescriptor(NSAppleEventDescriptor.null(), forKeyword: AEKeyword(keyAEContainer))
+        let specyfikator = wszystkie.coerce(toDescriptorType: typeObjectSpecifier) ?? wszystkie
+        zdarzenie.setDescriptor(specyfikator, forKeyword: AEKeyword(keyDirectObject))
+        do {
+            let odpowiedz = try zdarzenie.sendEvent(options: [.waitForReply], timeout: 2)
+            if let blad = odpowiedz.forKeyword(AEKeyword(keyErrorNumber))?.int32Value, blad != 0 {
+                return (0, Int(blad))
+            }
+            return (Int(odpowiedz.int32Value), 0)
+        } catch let blad as NSError {
+            return (0, blad.code)
+        }
+    }
+
     /// Wykonuje JavaScript w karcie o podanym numerze w oknie o podanym numerze.
     ///
     /// Zwraca odpowiedz strony albo `nil` z powodem - powod jest wazniejszy niz

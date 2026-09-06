@@ -32,7 +32,8 @@ enum SondaDzwieku {
                       BrowserSupport.isSupported(identyfikator) else { continue }
                 let wynik = KartyDzwieku.policz(pid: program.processIdentifier)
                 let js = PrzelacznikJS.stan(pid: program.processIdentifier)
-                print("\(program.localizedName ?? identyfikator): okien \(wynik.okna), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE"), JavaScript z Apple Events: \(js)")
+                let wgSlownika = ZdarzeniaPrzegladarki.ileOkien(pid: program.processIdentifier)
+                print("\(program.localizedName ?? identyfikator): okien \(wynik.okna) (wg słownika \(wgSlownika.ile), błąd \(wgSlownika.blad)), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE"), JavaScript z Apple Events: \(js)")
             }
             if argumenty.contains("--drzewo"),
                let przegladarka = NSWorkspace.shared.runningApplications.first(where: {
