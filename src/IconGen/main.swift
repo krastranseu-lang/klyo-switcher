@@ -101,14 +101,20 @@ func rysuj(_ bok: Int) -> CGImage? {
         ).offsetBy(dx: -odsun * 0.5, dy: odsun * 0.5)
         let sciezka = squircle(ramka, promien: promienOkna)
 
-        kontekst.saveGState()
         if przednie {
-            // Cień oddziela przednie okno od tylnych — bez niego wszystkie trzy
-            // zlewają się w jeden prostokąt, zwłaszcza w małym rozmiarze.
-            kontekst.setShadow(offset: CGSize(width: 0, height: -s * 0.012),
-                               blur: s * 0.035,
-                               color: CGColor(gray: 0, alpha: 0.55))
+            // Cień kładziemy OSOBNO, pod kształtem. Rysowany razem z wypełnieniem
+            // zostawiał jasny klin przy krawędzi — widać go było jako oderwany
+            // biały trójkąt obok okna.
+            kontekst.saveGState()
+            kontekst.setShadow(offset: CGSize(width: 0, height: -s * 0.014),
+                               blur: s * 0.04,
+                               color: CGColor(gray: 0, alpha: 0.6))
+            kontekst.addPath(sciezka)
+            kontekst.setFillColor(CGColor(gray: 0, alpha: 1))
+            kontekst.fillPath()
+            kontekst.restoreGState()
         }
+        kontekst.saveGState()
         kontekst.addPath(sciezka)
         kontekst.setFillColor(CGColor(red: 0.969, green: 0.973, blue: 0.980, alpha: jasnosc))
         kontekst.fillPath()
@@ -123,6 +129,10 @@ func rysuj(_ bok: Int) -> CGImage? {
         kontekst.saveGState()
         kontekst.addPath(sciezka)
         kontekst.clip()
+        // Przycięcie DO PASKA, nie do całego okna. Bez tej linii gradient zalewa
+        // cały prostokąt: okno staje się jednolicie czerwone, przestaje wyglądać
+        // jak okno, a w 16 px zostaje po nim tylko plama.
+        kontekst.clip(to: pasek)
         if let gradientPaska = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
                                           colors: [Barwy.akcentJasny, Barwy.akcent] as CFArray,
                                           locations: [0, 1]) {
@@ -136,7 +146,7 @@ func rysuj(_ bok: Int) -> CGImage? {
         // Trzy kropki okna — tylko tam, gdzie w ogóle będą widoczne.
         // Poniżej 128 px zlewają się w plamę i psują czytelność znaku.
         guard bok >= 128 else { return }
-        let promienKropki = paskaWysokosc * 0.17
+        let promienKropki = paskaWysokosc * 0.19
         let odstep = promienKropki * 3.1
         var x = pasek.minX + odstep
         for _ in 0..<3 {
