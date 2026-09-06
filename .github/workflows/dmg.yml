@@ -1,9 +1,9 @@
 name: Zrób obraz DMG
 
-# Obraz DMG da się zbudować tylko na macOS (potrzebne jest systemowe `hdiutil`),
-# a podpisujemy u siebie, bo klucz nie opuszcza naszego serwera. Dlatego ten
-# przebieg POBIERA gotową, już podpisaną aplikację z klyo.pl i pakuje ją w obraz.
-# Nie potrzebuje żadnych sekretów.
+# Obraz DMG da się zbudować tylko na macOS (potrzebne systemowe `hdiutil`
+# i Finder do ustawienia okna), a podpisujemy u siebie, bo klucz nie opuszcza
+# naszego serwera. Ten przebieg POBIERA gotową, podpisaną aplikację i pakuje ją
+# w obraz z prawdziwym oknem instalacyjnym: tłem, strzałką i ikonami na miejscu.
 
 on:
   workflow_dispatch:
@@ -11,12 +11,13 @@ on:
       paczka:
         description: "Adres podpisanej paczki .zip na klyo.pl"
         required: true
-        default: "https://klyo.pl/klyo-switcher/Klyo-Switcher-1.5.0-uniwersalny.zip"
 
 jobs:
   obraz:
     runs-on: macos-15
     steps:
+      - uses: actions/checkout@v4
+
       - name: Pobierz podpisaną aplikację
         run: |
           set -euo pipefail
@@ -28,23 +29,89 @@ jobs:
           echo "APP=$app" >> "$GITHUB_ENV"
           wersja=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$app/Contents/Info.plist")
           echo "WERSJA=$wersja" >> "$GITHUB_ENV"
+          codesign --verify --deep --strict "$app"
           echo "Aplikacja: $app (wersja $wersja)"
-          # Podpis musi przeżyć rozpakowanie — jeśli nie przeżył, obraz nie ma sensu.
-          codesign --verify --deep --strict --verbose=1 "$app"
 
-      - name: Złóż obraz
+      - name: Przygotuj zawartość okna
         run: |
           set -euo pipefail
           rm -rf okno && mkdir okno
           cp -R "$APP" okno/
-          # Strzałka do katalogu Programy: użytkownik przeciąga ikonę i to wszystko.
+          # Folder docelowy nazywa się po polsku „Programy" — dokładnie tak, jak
+          # widzi go użytkownik w Finderze. Alias o angielskiej nazwie zmuszałby
+          # do tłumaczenia sobie w głowie, gdzie właściwie ma przeciągnąć.
           ln -s /Applications "okno/Programy"
-          nazwa="Klyo-Switcher-${WERSJA}.dmg"
+          # Tło okna: Finder szuka go w ukrytym katalogu .background.
+          mkdir -p "okno/.background"
+          cp src/dmg/tlo.png "okno/.background/tlo.png"
+          cp "src/dmg/tlo@2x.png" "okno/.background/tlo@2x.png"
+          ls -la okno okno/.background
+
+      - name: Złóż obraz zapisywalny i ustaw wygląd okna
+        run: |
+          set -euo pipefail
+          rozmiar=$(du -sm okno | cut -f1)
+          rozmiar=$((rozmiar + 40))
+          rm -f roboczy.dmg
+          # Obraz musi być ZAPISYWALNY, żeby Finder mógł zapamiętać układ okna.
+          # Dopiero potem zamieniamy go na skompresowany, tylko do odczytu.
           hdiutil create -volname "Klyo Switcher" -srcfolder okno \
-            -ov -format UDZO -imagekey zlib-level=9 "$nazwa"
+            -ov -format UDRW -size "${rozmiar}m" roboczy.dmg
+          punkt=$(hdiutil attach roboczy.dmg -nobrowse -noverify -noautoopen | grep -o '/Volumes/.*' | head -1)
+          echo "obraz otwarty w: $punkt"
+
+          # Układ okna ustawia Finder — innej drogi nie ma, bo to on go zapamiętuje.
+          osascript <<'APPLESCRIPT'
+          tell application "Finder"
+            tell disk "Klyo Switcher"
+              open
+              set current view of container window to icon view
+              set toolbar visible of container window to false
+              set statusbar visible of container window to false
+              -- Rozmiar okna musi zgadzać się z tłem (660 x 420 pkt), inaczej
+              -- strzałka wskaże w bok albo tło zostanie ucięte.
+              set the bounds of container window to {200, 120, 860, 560}
+              set opts to the icon view options of container window
+              set arrangement of opts to not arranged
+              set icon size of opts to 128
+              set background picture of opts to file ".background:tlo.png"
+              -- Ikony w miejscach, do których prowadzi strzałka na tle.
+              set position of item "Klyo Switcher.app" of container window to {170, 250}
+              set position of item "Programy" of container window to {490, 250}
+              close
+              open
+              update without registering applications
+              delay 3
+            end tell
+          end tell
+          APPLESCRIPT
+
+          # Pliki pomocnicze chowamy przed użytkownikiem.
+          SetFile -a V "$punkt/.background" 2>/dev/null || true
+          sync
+          hdiutil detach "$punkt" -quiet || hdiutil detach "$punkt" -force -quiet
+
+      - name: Zamień na obraz tylko do odczytu
+        run: |
+          set -euo pipefail
+          nazwa="Klyo-Switcher-${WERSJA}.dmg"
+          rm -f "$nazwa"
+          hdiutil convert roboczy.dmg -format UDZO -imagekey zlib-level=9 -o "$nazwa"
           hdiutil verify "$nazwa"
           shasum -a 256 "$nazwa"
           echo "DMG=$nazwa" >> "$GITHUB_ENV"
+
+      - name: Sprawdź, że okno naprawdę ma tło i ikony
+        run: |
+          set -euo pipefail
+          punkt=$(hdiutil attach "$DMG" -nobrowse -readonly | grep -o '/Volumes/.*' | head -1)
+          bledy=0
+          [ -d "$punkt/Klyo Switcher.app" ] && echo "  ✓ program w oknie" || { echo "  ✗ brak programu"; bledy=1; }
+          [ -L "$punkt/Programy" ] && echo "  ✓ folder Programy do przeciągnięcia" || { echo "  ✗ brak folderu"; bledy=1; }
+          [ -f "$punkt/.background/tlo.png" ] && echo "  ✓ tło ze strzałką" || { echo "  ✗ BRAK TŁA — okno będzie gołe"; bledy=1; }
+          [ -f "$punkt/.DS_Store" ] && echo "  ✓ układ okna zapamiętany" || { echo "  ✗ BRAK UKŁADU — Finder pokaże ikony byle gdzie"; bledy=1; }
+          hdiutil detach "$punkt" -quiet
+          [ "$bledy" = "0" ] || exit 1
 
       - uses: actions/upload-artifact@v4
         with:
