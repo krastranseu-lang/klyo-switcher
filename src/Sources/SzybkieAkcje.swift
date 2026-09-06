@@ -96,9 +96,11 @@ enum ZrodloAkcji {
         for okno in okna {
             let tekst = SwitcherModel.uprosc(okno.title + " " + okno.subtitle)
             guard szukane.isEmpty || tekst.contains(szukane) else { continue }
+            let gra = Dzwiek.gra(pid: okno.pid)
             wynik.append(AkcjaSzybka(id: "okno:\(okno.id)", tytul: okno.title,
-                                     podtytul: okno.subtitle, ikona: okno.icon,
-                                     rodzaj: .okno(okno), waga: 0))
+                                     podtytul: gra ? "🔊 \(okno.subtitle)" : okno.subtitle,
+                                     ikona: okno.icon,
+                                     rodzaj: .okno(okno), waga: gra ? -1 : 0))
         }
 
         for karta in karty {

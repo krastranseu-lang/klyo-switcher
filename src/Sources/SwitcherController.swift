@@ -249,6 +249,8 @@ final class SwitcherController {
             return
         }
 
+        // Kto gra - pytamy raz na otwarcie listy, nie przy kazdej karcie.
+        Dzwiek.odswiez()
         var items = enumerator.snapshot(browsers: browsers, usage: usage)
         guard !items.isEmpty else {
             pendingCommit = false

@@ -727,6 +727,18 @@ struct SwitcherView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
+            // Glosnik: ten program wlasnie gra. Odpowiedz na „skad ten dzwiek"
+            // bez szukania po kolei w kazdym oknie.
+            if Dzwiek.gra(pid: item.pid) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .padding(4)
+                    .background(Circle().fill(Color.accentColor.opacity(0.92)))
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+
             if let label = item.place.label {
                 Text(label)
                     .font(.system(size: 8.5, weight: .semibold))
