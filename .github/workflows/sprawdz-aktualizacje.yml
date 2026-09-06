@@ -86,15 +86,28 @@ jobs:
           fi
 
           echo "— czy potwierdzenie Apple jest na miejscu —"
-          if spctl --assess --type execute "/Applications/Klyo Switcher.app" 2>&1 | grep -q accepted; then
+          ocena=$(spctl --assess --type execute --verbose=4 "/Applications/Klyo Switcher.app" 2>&1 || true)
+          echo "$ocena" | sed 's/^/      /'
+          if echo "$ocena" | grep -q accepted; then
             echo "  ✓ system akceptuje program"
           else
             echo "  ✗ system NIE akceptuje programu"; bledy=1
           fi
+          echo "— czy bilet potwierdzenia jest w środku —"
+          bilet=$(stapler validate "/Applications/Klyo Switcher.app" 2>&1 || true)
+          echo "$bilet" | sed 's/^/      /'
+          echo "$bilet" | grep -q "validate action worked" \
+            && echo "  ✓ bilet Apple na miejscu" \
+            || { echo "  ✗ BRAK BILETU — system pokaże ostrzeżenie przy uruchomieniu"; bledy=1; }
+
+          echo "— a jak wygląda plik PRZED podmianą (dla porównania) —"
+          ditto -x -k proba/nowa.zip proba/wzorzec 2>/dev/null || true
+          spctl --assess --type execute --verbose=4 "proba/wzorzec/Klyo Switcher.app" 2>&1 | sed 's/^/      /' || true
+          stapler validate "proba/wzorzec/Klyo Switcher.app" 2>&1 | sed 's/^/      /' || true
 
           echo "— czy kopia z numerem zniknęła —"
           if [ -e "/Applications/Klyo Switcher 5.app" ]; then
-            echo "  ✗ „Klyo Switcher 5.app" NADAL ISTNIEJE — zgody znów się rozjadą"; bledy=1
+            echo '  x kopia z numerem NADAL ISTNIEJE - zgody znow sie rozjada'; bledy=1
           else
             echo "  ✓ sprzątnięta"
           fi
