@@ -41,8 +41,24 @@ enum SondaDzwieku {
                 for wiersz in KartyDzwieku.drzewo(pid: przegladarka.processIdentifier) { print(wiersz) }
             }
             let grajace = Dzwiek.grajace()
-            for karta in KartyDzwieku.grajace(wsrodGrajacych: grajace) {
-                print("  gra: \(karta.program) — \(karta.tytul)\(karta.wyciszona ? " [wyciszona]" : "")")
+            let karty = KartyDzwieku.grajace(wsrodGrajacych: grajace)
+            for karta in karty {
+                print("  gra: \(karta.program) — \(karta.tytul)\(karta.wyciszona ? " [wyciszona]" : "") [okno \(karta.numerOkna), karta \(karta.numerKarty)]")
+            }
+            // `--ustaw <procent>` probuje ustawic glosnosc PIERWSZEJ grajacej karty
+            // i mowi, co z tego wyszlo. Bez tego „suwak karty nie dziala" nie da
+            // sie sprawdzic inaczej niz reka na myszy.
+            if let miejsce = argumenty.firstIndex(of: "--ustaw"),
+               miejsce + 1 < argumenty.count,
+               let procent = Float(argumenty[miejsce + 1]),
+               let karta = karty.first {
+                let wynik = GlosnoscKarty.ustaw(karta, poziom: procent / 100)
+                switch wynik {
+                case .ustawione(let ile):
+                    print("USTAWIONE \(Int(procent))% na „\(karta.tytul)" — elementów dźwiękowych: \(ile)")
+                default:
+                    print("NIE UDALO SIE: \(wynik.powod ?? "bez powodu")")
+                }
             }
             exit(0)
         }
