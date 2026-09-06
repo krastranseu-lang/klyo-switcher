@@ -1,0 +1,71 @@
+name: Sprawdź obraz DMG
+
+# Obraz, którego nikt nie otworzył, jest tylko plikiem. Ten przebieg robi na
+# prawdziwym macOS to, co zrobi człowiek: pobiera obraz z sieci, otwiera go,
+# przeciąga program do Programów i sprawdza, czy system go wpuszcza.
+
+on:
+  workflow_dispatch:
+    inputs:
+      adres:
+        description: "Adres obrazu .dmg"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sprawdz:
+    runs-on: macos-15
+    steps:
+      - name: Pobierz obraz tak, jak człowiek
+        run: |
+          set -euo pipefail
+          curl -fsSL -o obraz.dmg "${{ inputs.adres }}"
+          ls -la obraz.dmg
+          shasum -a 256 obraz.dmg
+
+      - name: Czy system ufa obrazowi
+        run: |
+          set -uo pipefail
+          echo "— podpis obrazu —"
+          codesign --verify --verbose=2 obraz.dmg 2>&1 | sed 's/^/  /' || echo "  BRAK PODPISU"
+          echo "— bilet potwierdzenia —"
+          stapler validate obraz.dmg 2>&1 | sed 's/^/  /' || echo "  BRAK BILETU"
+          echo "— ocena Gatekeepera —"
+          spctl --assess --type open --context context:primary-signature --verbose=4 obraz.dmg 2>&1 | sed 's/^/  /' || true
+
+      - name: Otwórz obraz i sprawdź, co jest w środku
+        run: |
+          set -euo pipefail
+          punkt=$(hdiutil attach obraz.dmg -nobrowse -readonly | grep -o '/Volumes/.*' | head -1)
+          echo "obraz otwarty w: $punkt"
+          ls -la "$punkt" | sed 's/^/  /'
+          app="$punkt/Klyo Switcher.app"
+          [ -d "$app" ] || { echo "W OBRAZIE NIE MA PROGRAMU"; exit 1; }
+          echo "— czy jest skrót do Programów (do przeciągnięcia) —"
+          [ -L "$punkt/Programy" ] && echo "  ✓ jest" || { echo "  ✗ BRAK — nie ma na co przeciągnąć"; exit 1; }
+          echo "— wersja programu —"
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$app/Contents/Info.plist" | sed 's/^/  /'
+          echo "— czy system wpuści program —"
+          spctl --assess --type execute --verbose=4 "$app" 2>&1 | sed 's/^/  /'
+          stapler validate "$app" 2>&1 | sed 's/^/  /' || true
+          echo "— przeciągam do Programów, jak zrobi człowiek —"
+          cp -R "$app" /Applications/
+          hdiutil detach "$punkt" -quiet
+          echo "— czy przeniesiony program jest zdrowy —"
+          codesign --verify --deep --strict "/Applications/Klyo Switcher.app" && echo "  ✓ podpis w porządku"
+          spctl --assess --type execute --verbose=4 "/Applications/Klyo Switcher.app" 2>&1 | sed 's/^/  /'
+          echo "— czy skrypt aktualizacji jedzie w środku —"
+          [ -x "/Applications/Klyo Switcher.app/Contents/Resources/aktualizuj.sh" ] && echo "  ✓ jest" || echo "  ✗ BRAK"
+          echo "— czy program w ogóle startuje —"
+          open -n "/Applications/Klyo Switcher.app" || true
+          sleep 6
+          if pgrep -x KlyoSwitcher >/dev/null; then
+            echo "  ✓ proces działa"
+            pkill -x KlyoSwitcher || true
+          else
+            echo "  ✗ PROGRAM NIE WYSTARTOWAŁ"
+            log show --last 2m --predicate 'process == "KlyoSwitcher" OR eventMessage CONTAINS "KlyoSwitcher"' 2>/dev/null | tail -25 | sed 's/^/    /' || true
+            exit 1
+          fi
