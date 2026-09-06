@@ -31,6 +31,10 @@ enum SondaDzwieku {
                 guard let identyfikator = program.bundleIdentifier,
                       BrowserSupport.isSupported(identyfikator) else { continue }
                 let wynik = KartyDzwieku.policz(pid: program.processIdentifier)
+                // Interesuja nas tylko te procesy, ktore cokolwiek pokazuja -
+                // reszta to helpery i zasmieca odczyt.
+                let wgSlownikaWstepnie = ZdarzeniaPrzegladarki.ileOkien(pid: program.processIdentifier)
+                if wynik.okna == 0 && wgSlownikaWstepnie.ile == 0 && wgSlownikaWstepnie.blad == -1700 { continue }
                 let js = PrzelacznikJS.stan(pid: program.processIdentifier)
                 let wgSlownika = ZdarzeniaPrzegladarki.ileOkien(pid: program.processIdentifier)
                 print("\(program.localizedName ?? identyfikator): okien \(wynik.okna) (wg słownika \(wgSlownika.ile), błąd \(wgSlownika.blad)), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE"), JavaScript z Apple Events: \(js)")

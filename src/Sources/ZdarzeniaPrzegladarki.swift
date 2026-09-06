@@ -54,7 +54,14 @@ enum ZdarzeniaPrzegladarki {
                                 forKeyword: AEKeyword(keyAEDesiredClass))
         wszystkie.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(formAbsolutePosition)),
                                 forKeyword: AEKeyword(keyAEKeyForm))
-        wszystkie.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(kAEAll)),
+        // „wszystkie" to porzadkowa wartosc bezwzgledna, a nie zwykly wyliczeniowiec -
+        // podane jako `enumCode` konczylo sie bledem koercji (-1700), czyli
+        // pomiarem, ktory mierzyl wlasna pomylke.
+        var porzadek = OSType(kAEAll)
+        wszystkie.setDescriptor(NSAppleEventDescriptor(descriptorType: typeAbsoluteOrdinal,
+                                                       bytes: &porzadek,
+                                                       length: MemoryLayout<OSType>.size)
+                                ?? NSAppleEventDescriptor.null(),
                                 forKeyword: AEKeyword(keyAEKeyData))
         wszystkie.setDescriptor(NSAppleEventDescriptor.null(), forKeyword: AEKeyword(keyAEContainer))
         let specyfikator = wszystkie.coerce(toDescriptorType: typeObjectSpecifier) ?? wszystkie
