@@ -328,13 +328,20 @@ struct SwitcherView: View {
         // Wartosci GOTOWE, nie wyrazenia do rozwiazania w srodku lancucha
         // modyfikatorow — kompilator SwiftUI dusi sie na zagniezdzonych ternarach
         // zmieszanych z opcjonalnym `map`, tak jak przy oknie zgod (Uprawnienia.swift).
+        // Obramowanie ulubionego jest CELOWO delikatne. Pierwsza wersja swiecila
+        // mocno i wygladala dobrze na jednej karcie - ale ulubiony jest PROGRAM,
+        // a nie okno, wiec przy pietnastu oknach Chrome pietnascie kart dostawalo
+        // bursztynowa ramke i cala lista stawala sie zolta. Znak, ktory dostaje
+        // polowa listy, przestaje byc znakiem.
         let barwaObramowania: Color = isSelected
             ? Color.accentColor.opacity(0.95)
-            : (barwaUlubionego ?? Color.white).opacity(barwaUlubionego != nil ? 0.65 : 0.055)
-        let grubosc: CGFloat = isSelected ? 1.8 : (barwaUlubionego != nil ? 1.4 : 1)
-        let poswiataBarwa: Color = barwaUlubionego ?? .clear
-        let poswiataOpacja: Double = barwaUlubionego != nil ? 0.45 : 0
-        let poswiataPromien: CGFloat = barwaUlubionego != nil ? 9 : 0
+            : (barwaUlubionego ?? Color.white).opacity(barwaUlubionego != nil ? 0.34 : 0.055)
+        let grubosc: CGFloat = isSelected ? 1.8 : (barwaUlubionego != nil ? 1.1 : 1)
+        // Poswiate zostawiamy wylacznie pierwszemu miejscu - jedno, mocne wyroznienie
+        // zamiast trzech slabych.
+        let poswiataBarwa: Color = ulubione == 0 ? (barwaUlubionego ?? .clear) : .clear
+        let poswiataOpacja: Double = ulubione == 0 ? 0.30 : 0
+        let poswiataPromien: CGFloat = ulubione == 0 ? 7 : 0
         // Tlo karty jako gradient, nie plaski kolor: plaska plama w kolorze akcentu
         // wyglada jak zaznaczenie w tabelce, a nie jak karta, ktora stoi wyzej.
         let gornaBarwa: Color = isSelected ? Color.accentColor.opacity(0.38) : Color.primary.opacity(0.07)
@@ -343,6 +350,15 @@ struct SwitcherView: View {
         // Niewybrane karty odrobine przygaszone - wzrok idzie tam, gdzie trzeba,
         // a lista nie zamienia sie w rownomierna sciane kwadratow.
         let przejrzystosc: Double = isSelected ? 1.0 : 0.93
+        // Drugi wiersz powtarzajacy pierwszy to zmarnowany wiersz. Okno bez wlasnego
+        // tytulu nazywa sie tak, jak program - wtedy pod spodem lepiej powiedziec,
+        // GDZIE ono jest, niz drugi raz to samo.
+        let podtytul: String = {
+            let tytul = item.title.trimmingCharacters(in: .whitespaces)
+            let opis = item.subtitle.trimmingCharacters(in: .whitespaces)
+            if opis.isEmpty || opis == tytul { return item.place.label ?? "" }
+            return opis
+        }()
 
         return VStack(alignment: .leading, spacing: 7) {
             preview(for: item, showsControls: showsControls, isSelected: isSelected)
@@ -358,12 +374,13 @@ struct SwitcherView: View {
                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                         .font(.system(size: 7.5))
                 }
-                Text(item.subtitle)
+                Text(podtytul)
                     .font(.system(size: 9))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             .foregroundStyle(.secondary)
+            .opacity(podtytul.isEmpty ? 0 : 1)
         }
         .padding(9)
         .frame(width: HUDLayout.cardWidth, height: HUDLayout.cardHeight, alignment: .top)
@@ -450,8 +467,16 @@ struct SwitcherView: View {
     private func preview(for item: SwitcherItem, showsControls: Bool, isSelected: Bool) -> some View {
         let symbol = Settings.modifier.symbol
         return ZStack(alignment: .topLeading) {
+            // Kadr bez zrzutu ma wygladac na zamierzony, a nie na pusty. Plaski
+            // ciemny prostokat czyta sie jak „cos sie nie wczytalo"; delikatny
+            // gradient z wieksza ikona wyglada jak karta programu.
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color.black.opacity(0.26))
+                .fill(
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.30), Color.black.opacity(0.16)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
 
             if let thumbnail = item.thumbnail {
                 Image(nsImage: thumbnail)
@@ -463,7 +488,8 @@ struct SwitcherView: View {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: Color.black.opacity(0.30), radius: 8, y: 3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
@@ -506,7 +532,10 @@ struct SwitcherView: View {
                     }
                 }
                 .padding(4)
-                .opacity(isSelected || model.hoveredID == item.id ? 1 : 0.55)
+                // Przyciski zostaja widoczne zawsze (mysz w tym oknie nie wybiera,
+                // wiec nie ma jak ich „wywolac"), ale w spoczynku sa ledwo widoczne -
+                // dwadziescia osiem kart z wyraznymi krzyzykami to sciana ikon.
+                .opacity(isSelected || model.hoveredID == item.id ? 1 : 0.28)
             }
         }
         .frame(width: HUDLayout.cardWidth - 18, height: HUDLayout.previewHeight)
