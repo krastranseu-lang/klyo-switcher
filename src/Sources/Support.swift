@@ -14,6 +14,10 @@ enum AXKey {
     static let subrole = "AXSubrole"
     static let minimized = "AXMinimized"
     static let main = "AXMain"
+    static let mainWindow = "AXMainWindow"
+    /// Ustawienie tego na `true` wystawia PROGRAM na wierzch. Bez tego kroku
+    /// podniesienie pojedynczego okna nie robi nic, gdy program nie jest aktywny.
+    static let frontmost = "AXFrontmost"
     static let focusedWindow = "AXFocusedWindow"
     static let raise = "AXRaise"
     static let standardWindow = "AXStandardWindow"

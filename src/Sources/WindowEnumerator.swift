@@ -446,6 +446,8 @@ enum WindowActivator {
                       let cel = biurkoCelu,
                       let teraz = poZmianie.current.first,
                       let kroki = SkrotBiurka.odleglosc(z: teraz, do: cel, mapa: poZmianie) else {
+                    // Biurko sie zgadza (albo nie ma dokad isc) - zostaje samo okno.
+                    Wierzch.podnies(window: window, windowID: windowID, pid: pid)
                     dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                        programNaWierzchuZrodla: programNaWierzchuZrodla)
                     return
@@ -454,9 +456,11 @@ enum WindowActivator {
                 SkrotBiurka.przejdzKrokami(kroki) {
                     DziennikBiurek.zapisz("po przejsciu skrotem: \(DziennikBiurek.stanBiurek())")
                     // Samo przejście biurka nie nadaje oknu fokusu — podnosimy je
-                    // jeszcze raz, już na właściwym biurku.
+                    // jeszcze raz, już na właściwym biurku. Tu zapasowa aktywacja
+                    // programu jest już bezpieczna: jesteśmy na docelowym biurku,
+                    // więc nie ma jak wrócić na tamto, z którego wyszliśmy.
                     _ = WindowFocus.bring(windowID: windowID, pid: pid)
-                    AXUIElementPerformAction(window, AXKey.raise as CFString)
+                    Wierzch.podnies(window: window, windowID: windowID, pid: pid)
                     dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                        programNaWierzchuZrodla: programNaWierzchuZrodla)
                 }
@@ -464,11 +468,13 @@ enum WindowActivator {
             return
         }
 
-        if broughtByWindowServer {
-            confirmFrontmost(pid: pid)
-        } else {
-            activateApp(pid: pid)
-        }
+        // Odpowiedz WindowServera idzie juz TYLKO do dziennika. Na macOS 26.6
+        // `_SLPSSetFrontProcessWithOptions` zwraca zero (czyli „zrobione") i nie
+        // zmienia niczego - zmierzone 6 wrzesnia 2026 na tej samej maszynie, na
+        // ktorej uzytkownik zglosil, ze ⌘⇥ nie przelacza. Prawdziwe przelaczenie
+        // robi `Wierzch`, ktory na koniec PYTA system, ktore okno jest na wierzchu.
+        DziennikBiurek.zapisz("WindowServer odpowiedzial: \(broughtByWindowServer ? "przyjete" : "odmowa")")
+        Wierzch.podnies(window: window, windowID: windowID, pid: pid)
     }
 
     /// Czy okno jest WIDOCZNE na biezacym biurku.

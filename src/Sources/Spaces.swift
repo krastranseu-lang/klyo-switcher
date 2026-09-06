@@ -414,10 +414,55 @@ enum DziennikBiurek {
     static func zapisz(_ tekst: String) {
         kolejka.async {
             let czas = Self.znacznik()
-            wpisy.append("\(czas)  \(tekst)")
+            let wiersz = "\(czas)  \(tekst)"
+            wpisy.append(wiersz)
             if wpisy.count > limit { wpisy.removeFirst(wpisy.count - limit) }
+            doPliku(wiersz)
         }
     }
+
+    /// Ten sam wpis ląduje w pliku, nie tylko w pamięci.
+    ///
+    /// Dziennik trzymany wyłącznie w pamięci daje się przeczytać jednym sposobem:
+    /// człowiek otwiera Ustawienia i klika „kopiuj". Znaczy to, że przy każdej
+    /// próbie diagnozy ktoś musi siedzieć przy komputerze — a usterka bywa taka,
+    /// że pokazuje się raz na dziesięć naciśnięć. Plik czyta się po fakcie.
+    ///
+    /// Zapis idzie tą samą kolejką co reszta dziennika, więc dwa wątki nie wejdą
+    /// sobie w słowo, a `FileHandle` domykamy sami — plik zostaje spójny nawet,
+    /// gdy program zniknie w połowie sesji.
+    private static func doPliku(_ wiersz: String) {
+        guard let plik = sciezkaPliku else { return }
+        let dane = Data((wiersz + "\n").utf8)
+        let menedzer = FileManager.default
+        if !menedzer.fileExists(atPath: plik.path) {
+            try? menedzer.createDirectory(at: plik.deletingLastPathComponent(),
+                                          withIntermediateDirectories: true)
+            menedzer.createFile(atPath: plik.path, contents: dane)
+            return
+        }
+        // Obcinamy dziennik, zanim urośnie: przełącznika używa się setki razy
+        // dziennie, więc plik bez granicy rósłby bez końca.
+        let atrybuty = try? menedzer.attributesOfItem(atPath: plik.path)
+        if let rozmiar = atrybuty?[.size] as? Int, rozmiar > 512 * 1024,
+           let calosc = try? String(contentsOf: plik, encoding: .utf8) {
+            let ogon = String(calosc.suffix(100_000))
+            try? ogon.write(to: plik, atomically: true, encoding: .utf8)
+        }
+        guard let uchwyt = try? FileHandle(forWritingTo: plik) else { return }
+        defer { try? uchwyt.close() }
+        _ = try? uchwyt.seekToEnd()
+        try? uchwyt.write(contentsOf: dane)
+    }
+
+    /// `~/Library/Logs/Klyo Switcher/dziennik.log` — miejsce, w które system sam
+    /// zagląda przy zbieraniu diagnostyki i które widać w programie Konsola.
+    static let sciezkaPliku: URL? = {
+        guard let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return logs.appendingPathComponent("Logs/Klyo Switcher/dziennik.log")
+    }()
 
     static func tresc() -> String {
         kolejka.sync {
