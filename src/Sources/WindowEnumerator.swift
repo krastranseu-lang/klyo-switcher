@@ -254,12 +254,11 @@ final class WindowEnumerator {
                         pid: pid,
                         windowID: 0,
                         isMinimized: minimized,
-                        // Biurko pytamy SYSTEMU, zamiast zakładać „to samo".
-                        // Accessibility oddaje okna ze wszystkich biurek —
-                        // sztywne `.here` kasowało tę wiedzę i program uznawał,
-                        // że nie ma dokąd przełączać.
-                        place: spaces.place(of: spaces.isAvailable ? Spaces.space(of: identifier) : nil,
-                                            onScreen: false),
+                        // Te okna nie mają własnego identyfikatora w systemie
+                        // (Accessibility oddało je bez numeru), więc nie ma o co
+                        // zapytać, na którym są biurku. Zakładamy bieżące —
+                        // to jedyne uczciwe założenie przy braku danych.
+                        place: .here,
                         target: .window(window),
                         thumbnail: nil,
                         bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
