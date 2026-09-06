@@ -472,14 +472,33 @@ enum WindowActivator {
                 activateApp(pid: pid)
                 return
             }
-            // Droga glowna: prosba do systemu o zmiane biurka. Jedno wywolanie,
-            // to samo, ktorego uzywa Mission Control - przenosi UZYTKOWNIKA.
-            // Okna nie dotyka ani teraz, ani nigdy.
-            if !WindowFocus.skoczNaBiurko(cel, mapa: mapa) {
-                // Skok niedostepny - zostaje aktywacja programu i decyzja systemu.
-                DziennikBiurek.zapisz("skok niedostepny - oddaje decyzje systemowi (aktywacja programu)")
-                activateApp(pid: pid)
-            }
+            // Droga zgodna z dokumentacja Apple i tylko taka.
+            //
+            // Prywatny „skok wprost" (SLSManagedDisplaySetCurrentSpace) zostal
+            // stad usuniety, bo robi ATRAPE: przestawia wewnetrzny licznik
+            // WindowServera, ale nie wykonuje prawdziwego przejscia - pasek
+            // Mission Control dalej pokazuje stare biurko, tapeta sie nie zmienia,
+            // a okna z dwoch biurek mieszaja sie na ekranie. Uzytkownik pokazal
+            // to zrzutem: „nie przerzuca prawdziwe biurka maca, to jest atrapa".
+            //
+            // Co mowi dokumentacja Apple:
+            //   NSWindow.CollectionBehavior.moveToActiveSpace - „when the window
+            //   becomes active, move it to the active space INSTEAD OF switching
+            //   spaces". Czyli o tym, co się stanie, decyduje OKNO i ustawienie
+            //   systemu, a nie program obok. Publicznego API „przenies mnie na
+            //   biurko tego okna" po prostu nie ma.
+            //   NSApplication.yieldActivation(to:) (macOS 14) - „explicitly allows
+            //   another app to make itself active"; bez tego aktywacja cudzego
+            //   programu bywa odrzucana.
+            //   kAXRaiseAction - „causes a window to become as frontmost as is
+            //   allowed by the containing application's circumstances".
+            //
+            // Robimy wiec dokladnie to, co przewidzial system: ustepujemy
+            // aktywacji, prosimy program o aktywacje i CZEKAMY. Jesli system
+            // przeszedl na biurko okna - podnosimy okno. Jesli nie przeszedl -
+            // nie robimy nic, bo kazdy nasz ruch skonczylby sie przeniesieniem
+            // OKNA do nas, czyli tym, czego wlasciciel projektu zakazal.
+            activateApp(pid: pid)
             poczekajNaBiurko(cel, prob: 12) {
                 DziennikBiurek.zapisz("system przeszedl na biurko okna: \(DziennikBiurek.stanBiurek())")
                 podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
@@ -575,6 +594,12 @@ enum WindowActivator {
         }
         guard prob > 1 else {
             DziennikBiurek.zapisz("biurko \(biurko) NIE potwierdzone mimo czekania - nie ruszam okna")
+            // Cisza w tym miejscu wyglada jak usterka. Jedno zdanie mowi, co sie
+            // stalo i dlaczego program celowo nic nie zrobil.
+            ToastPresenter.shared.show(
+                "To okno stoi na innym biurku, a macOS tam nie przeszedł. Nie przenoszę okna do Ciebie.",
+                symbol: "rectangle.on.rectangle"
+            )
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -659,7 +684,14 @@ enum WindowActivator {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return }
         if app.isHidden { app.unhide() }
         if #available(macOS 14.0, *) {
-            _ = app.activate()
+            // Wspolpracujaca aktywacja, tak jak opisuje ja Apple: najpierw USTEPUJEMY
+            // aktywacji („explicitly allows another app to make itself active"),
+            // dopiero potem prosimy tamten program, zeby sie wystawil. Bez ustapienia
+            // system ma prawo prosbe odrzucic - i to jest udokumentowany powod,
+            // dla ktorego aktywacja cudzego programu „czasem nie dziala".
+            NSApp.yieldActivation(to: app)
+            let udalo = app.activate()
+            DziennikBiurek.zapisz("aktywacja programu \(app.localizedName ?? "?") (pid \(pid)): \(udalo ? "przyjeta" : "ODRZUCONA")")
         } else {
             _ = app.activate(options: [.activateIgnoringOtherApps])
         }
