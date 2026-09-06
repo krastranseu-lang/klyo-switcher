@@ -192,6 +192,29 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         try? menedzer.removeItem(atPath: ustepujaca)
 
+        // ZDJĘCIE ZNACZNIKA POBRANIA — bez tego cała reszta nic nie daje.
+        //
+        // macOS izoluje w losowym katalogu tymczasowym każdy program, który nosi
+        // znacznik `com.apple.quarantine` i jest otwierany przez system
+        // (dokumentacja: „app translocation" wymaga tego znacznika; po jego
+        // usunięciu nie zachodzi). Znacznik wędruje razem z kopiowanym plikiem,
+        // więc kopia w Programach też go miała — i przy uruchomieniu lądowała
+        // w katalogu tymczasowym dokładnie tak samo jak oryginał. Człowiek widział
+        // wtedy to samo pytanie o przeniesienie w kółko, choć program za każdym
+        // razem uczciwie się kopiował.
+        //
+        // Znacznik zdejmuje też Finder przy ręcznym przeciągnięciu — i tylko
+        // dlatego przeciąganie działało, a nasze kopiowanie nie. Robimy to samo.
+        // Zdejmujemy go WYŁĄCZNIE z własnej kopii, nigdy z cudzych plików,
+        // i dopiero po tym, jak system sprawdził nasz podpis przy pierwszym starcie.
+        let odznacz = Process()
+        odznacz.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        odznacz.arguments = ["-dr", "com.apple.quarantine", cel]
+        odznacz.standardOutput = FileHandle.nullDevice
+        odznacz.standardError = FileHandle.nullDevice
+        try? odznacz.run()
+        odznacz.waitUntilExit()
+
         // Rejestr programow trzyma opis poprzedniej kopii - bez odswiezenia
         // polecenie otwarcia potrafi trafic w nieaktualny wpis i nie zrobic nic.
         let rejestr = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
