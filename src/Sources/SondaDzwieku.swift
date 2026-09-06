@@ -33,6 +33,13 @@ enum SondaDzwieku {
                 let wynik = KartyDzwieku.policz(pid: program.processIdentifier)
                 print("\(program.localizedName ?? identyfikator): okien \(wynik.okna), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE")")
             }
+            if argumenty.contains("--drzewo"),
+               let przegladarka = NSWorkspace.shared.runningApplications.first(where: {
+                   ($0.bundleIdentifier.map(BrowserSupport.isSupported) ?? false)
+                       && !KartyDzwieku.drzewo(pid: $0.processIdentifier).isEmpty
+               }) {
+                for wiersz in KartyDzwieku.drzewo(pid: przegladarka.processIdentifier) { print(wiersz) }
+            }
             let grajace = Dzwiek.grajace()
             for karta in KartyDzwieku.grajace(wsrodGrajacych: grajace) {
                 print("  gra: \(karta.program) — \(karta.tytul)\(karta.wyciszona ? " [wyciszona]" : "")")

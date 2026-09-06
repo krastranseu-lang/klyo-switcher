@@ -93,7 +93,7 @@ enum KartyDzwieku {
     private static func karty(pid: pid_t, nazwaProgramu: String) -> [KartaGrajaca] {
         let aplikacja = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(aplikacja, 0.4)
-        guard let okna = wartosc(aplikacja, kAXWindowsAttribute) as? [AXUIElement] else { return [] }
+        let okna = elementy(aplikacja, kAXWindowsAttribute)
         var wynik: [KartaGrajaca] = []
         for (numer, okno) in okna.enumerated() {
             for karta in paskiKart(okno) {
@@ -128,10 +128,9 @@ enum KartyDzwieku {
     /// karty leza gdzie indziej, a pierwsza napotkana `AXTabGroup` okazala sie
     /// zawartoscia STRONY, nie paskiem kart.
     private static func paskiKart(_ element: AXUIElement, glebokosc: Int = 0) -> [AXUIElement] {
-        guard glebokosc < 7,
-              let dzieci = wartosc(element, kAXChildrenAttribute) as? [AXUIElement] else { return [] }
+        guard glebokosc < 8 else { return [] }
         var wynik: [AXUIElement] = []
-        for dziecko in dzieci {
+        for dziecko in elementy(element, kAXChildrenAttribute) {
             if (wartosc(dziecko, kAXSubroleAttribute) as? String) == "AXTabButton" {
                 wynik.append(dziecko)
                 continue
@@ -143,8 +142,7 @@ enum KartyDzwieku {
 
     /// Przycisk wyciszenia NA karcie - Safari go daje, Chromium nie.
     private static func przyciskWyciszenia(_ karta: AXUIElement) -> AXUIElement? {
-        guard let dzieci = wartosc(karta, kAXChildrenAttribute) as? [AXUIElement] else { return nil }
-        for dziecko in dzieci {
+        for dziecko in elementy(karta, kAXChildrenAttribute) {
             guard (wartosc(dziecko, kAXRoleAttribute) as? String) == kAXButtonRole,
                   let nazwa = (wartosc(dziecko, kAXTitleAttribute) as? String)?.lowercased() else { continue }
             if nazwyPrzycisku.contains(where: { nazwa.contains($0) }) { return dziecko }
@@ -197,12 +195,10 @@ enum KartyDzwieku {
     }
 
     private static func znajdzPozycjeWyciszenia(_ aplikacja: AXUIElement, glebokosc: Int = 0) -> AXUIElement? {
-        guard glebokosc < 5,
-              let dzieci = wartosc(aplikacja, kAXChildrenAttribute) as? [AXUIElement] else { return nil }
-        for dziecko in dzieci {
-            if (wartosc(dziecko, kAXRoleAttribute) as? String) == kAXMenuRole,
-               let pozycje = wartosc(dziecko, kAXChildrenAttribute) as? [AXUIElement] {
-                for pozycja in pozycje {
+        guard glebokosc < 5 else { return nil }
+        for dziecko in elementy(aplikacja, kAXChildrenAttribute) {
+            if (wartosc(dziecko, kAXRoleAttribute) as? String) == kAXMenuRole {
+                for pozycja in elementy(dziecko, kAXChildrenAttribute) {
                     guard let tytul = (wartosc(pozycja, kAXTitleAttribute) as? String)?.lowercased() else { continue }
                     if pozycjeWyciszenia.contains(where: { tytul.contains($0) }) { return pozycja }
                 }
@@ -226,12 +222,52 @@ enum KartyDzwieku {
         axCopy(element, atrybut)
     }
 
+    /// Tablica elementow czytana przez API CoreFoundation, a nie przez rzutowanie.
+    ///
+    /// `as? [AXUIElement]` na tablicy CF potrafi zwrocic pusto mimo poprawnej
+    /// zawartosci - i wtedy „nie ma kart" znaczy tylko tyle, ze Swift nie umial
+    /// przelozyc typu. Tu liczymy elementy wprost, wiec nie ma czego zgadywac.
+    private static func elementy(_ element: AXUIElement, _ atrybut: String) -> [AXUIElement] {
+        guard let surowe = axCopy(element, atrybut) else { return [] }
+        guard CFGetTypeID(surowe) == CFArrayGetTypeID() else { return [] }
+        let tablica = surowe as! CFArray
+        var wynik: [AXUIElement] = []
+        for numer in 0..<CFArrayGetCount(tablica) {
+            guard let wskaznik = CFArrayGetValueAtIndex(tablica, numer) else { continue }
+            let pozycja = unsafeBitCast(wskaznik, to: AXUIElement.self)
+            guard CFGetTypeID(pozycja) == AXUIElementGetTypeID() else { continue }
+            wynik.append(pozycja)
+        }
+        return wynik
+    }
+
+    /// Role dzieci na kolejnych poziomach - dla sondy, gdy kart nie widac.
+    static func drzewo(pid: pid_t, poziomy: Int = 5) -> [String] {
+        var wiersze: [String] = []
+        let aplikacja = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(aplikacja, 1.0)
+        for (numer, okno) in elementy(aplikacja, kAXWindowsAttribute).enumerated() where numer < 2 {
+            wiersze.append("okno \(numer): \((wartosc(okno, kAXTitleAttribute) as? String)?.prefix(40) ?? "")")
+            func zejdz(_ element: AXUIElement, _ poziom: Int) {
+                guard poziom < poziomy else { return }
+                for dziecko in elementy(element, kAXChildrenAttribute) {
+                    let rola = (wartosc(dziecko, kAXRoleAttribute) as? String) ?? "?"
+                    let pod = (wartosc(dziecko, kAXSubroleAttribute) as? String) ?? ""
+                    wiersze.append(String(repeating: "  ", count: poziom + 1) + rola + (pod.isEmpty ? "" : "/" + pod))
+                    zejdz(dziecko, poziom + 1)
+                }
+            }
+            zejdz(okno, 0)
+        }
+        return wiersze
+    }
+
     /// Ile czego widac - dla sondy. „Zero kart" i „zero okien" to dwie rozne
     /// usterki, a bez licznika wygladaja tak samo.
     static func policz(pid: pid_t) -> (okna: Int, karty: Int, zaufanie: Bool) {
         let aplikacja = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(aplikacja, 0.6)
-        let okna = (wartosc(aplikacja, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+        let okna = elementy(aplikacja, kAXWindowsAttribute)
         var karty = 0
         for okno in okna { karty += paskiKart(okno).count }
         return (okna.count, karty, AXIsProcessTrusted())
