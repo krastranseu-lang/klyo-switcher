@@ -37,10 +37,12 @@ jobs:
           set -euo pipefail
           rm -rf okno && mkdir okno
           cp -R "$APP" okno/
-          # Folder docelowy nazywa się po polsku „Programy" — dokładnie tak, jak
-          # widzi go użytkownik w Finderze. Alias o angielskiej nazwie zmuszałby
-          # do tłumaczenia sobie w głowie, gdzie właściwie ma przeciągnąć.
-          ln -s /Applications "okno/Programy"
+          # Folder docelowy nazywamy DOKŁADNIE tak, jak nazywa go system po polsku:
+          # „Aplikacje". Wcześniej stało tu „Programy" i użytkownik miał przed sobą
+          # dwie różne nazwy — jedną w oknie instalacyjnym, drugą w Finderze i na
+          # pasku bocznym. Nazwa, która nie zgadza się z tym, co człowiek widzi
+          # w systemie, każe mu się zastanawiać, czy to na pewno to samo miejsce.
+          ln -s /Applications "okno/Aplikacje"
           # Tło okna: Finder szuka go w ukrytym katalogu .background.
           mkdir -p "okno/.background"
           cp src/dmg/tlo.png "okno/.background/tlo.png"
@@ -77,7 +79,7 @@ jobs:
               set background picture of opts to file ".background:tlo.png"
               -- Ikony w miejscach, do których prowadzi strzałka na tle.
               set position of item "Klyo Switcher.app" of container window to {170, 250}
-              set position of item "Programy" of container window to {490, 250}
+              set position of item "Aplikacje" of container window to {490, 250}
               close
               open
               update without registering applications
@@ -107,7 +109,7 @@ jobs:
           punkt=$(hdiutil attach "$DMG" -nobrowse -readonly | grep -o '/Volumes/.*' | head -1)
           bledy=0
           [ -d "$punkt/Klyo Switcher.app" ] && echo "  ✓ program w oknie" || { echo "  ✗ brak programu"; bledy=1; }
-          [ -L "$punkt/Programy" ] && echo "  ✓ folder Programy do przeciągnięcia" || { echo "  ✗ brak folderu"; bledy=1; }
+          [ -L "$punkt/Aplikacje" ] && echo "  ✓ folder Aplikacje do przeciągnięcia" || { echo "  ✗ brak folderu"; bledy=1; }
           [ -f "$punkt/.background/tlo.png" ] && echo "  ✓ tło ze strzałką" || { echo "  ✗ BRAK TŁA — okno będzie gołe"; bledy=1; }
           [ -f "$punkt/.DS_Store" ] && echo "  ✓ układ okna zapamiętany" || { echo "  ✗ BRAK UKŁADU — Finder pokaże ikony byle gdzie"; bledy=1; }
           hdiutil detach "$punkt" -quiet
