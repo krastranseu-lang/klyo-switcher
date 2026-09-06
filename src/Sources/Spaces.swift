@@ -337,3 +337,60 @@ enum PrzelaczanieBiurek {
         NSWorkspace.shared.open(url)
     }
 }
+
+// MARK: - Zapasowa droga: ten sam skrot, ktorego uzywa gest trzema palcami
+
+/// Przejscie na inne biurko systemowym skrotem Ctrl+strzalka.
+///
+/// Dlaczego to w ogole istnieje: WindowServer potrafi ODMOWIC przelaczenia, gdy
+/// prosba nie wyglada dla niego na „prosto z reki uzytkownika". Dlatego klikniecie
+/// mysza w liscie dziala, a wybor klawiatura nie - to samo okno, ta sama funkcja,
+/// inny kontekst zdarzenia. Zamiast zgadywac, czego systemowi zabraklo, robimy to,
+/// co robi czlowiek: naciskamy ten sam skrot, ktory macOS wykonuje przy gescie
+/// trzema palcami. Tego system nie odmawia, bo to zwykle nacisniecie klawiszy.
+///
+/// Ctrl+strzalka jest w macOS wlaczone domyslnie (inaczej niz Ctrl+numer biurka),
+/// wiec dziala u kazdego bez grzebania w ustawieniach.
+enum SkrotBiurka {
+    private static let strzalkaWLewo: CGKeyCode = 123
+    private static let strzalkaWPrawo: CGKeyCode = 124
+
+    /// Ile krokow w prawo (dodatnie) albo w lewo (ujemne) dzieli biurka.
+    /// `nil`, gdy ktoregos z nich nie ma w spisie (np. okno pelnoekranowe).
+    static func odleglosc(z: SpaceID, do cel: SpaceID, mapa: SpaceMap) -> Int? {
+        guard let numerZ = mapa.desktopNumbers[z], let numerDo = mapa.desktopNumbers[cel] else { return nil }
+        return numerDo - numerZ
+    }
+
+    /// Przechodzi o zadana liczbe biurek. Kazdy krok to jedno nacisniecie
+    /// Ctrl+strzalka z przerwa na animacje przejscia - bez niej system gubi
+    /// kolejne nacisniecia i konczymy na biurku posrednim.
+    static func przejdzKrokami(_ kroki: Int, zakonczenie: @escaping () -> Void) {
+        guard kroki != 0, abs(kroki) <= 12 else { zakonczenie(); return }
+        let klawisz = kroki > 0 ? strzalkaWPrawo : strzalkaWLewo
+        wyslij(klawisz: klawisz, pozostalo: abs(kroki), zakonczenie: zakonczenie)
+    }
+
+    private static func wyslij(klawisz: CGKeyCode, pozostalo: Int, zakonczenie: @escaping () -> Void) {
+        guard pozostalo > 0 else {
+            // Po ostatnim kroku dajemy systemowi domknac animacje, zanim ktokolwiek
+            // sprawdzi, na ktorym biurku jestesmy.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { zakonczenie() }
+            return
+        }
+        let zrodlo = CGEventSource(stateID: .combinedSessionState)
+        guard let wcisniecie = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawisz, keyDown: true),
+              let puszczenie = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawisz, keyDown: false) else {
+            zakonczenie(); return
+        }
+        wcisniecie.flags = .maskControl
+        puszczenie.flags = .maskControl
+        wcisniecie.post(tap: .cghidEventTap)
+        puszczenie.post(tap: .cghidEventTap)
+        // Przejscie miedzy biurkami trwa u macOS ok. 0,2 s. Szybsze ponowienie
+        // zostaje polkniete i konczymy w polowie drogi.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            wyslij(klawisz: klawisz, pozostalo: pozostalo - 1, zakonczenie: zakonczenie)
+        }
+    }
+}
