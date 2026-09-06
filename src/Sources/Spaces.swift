@@ -59,6 +59,17 @@ enum SkyLight {
         return unsafeBitCast(pointer, to: SetFrontProcessWithOptions.self)
     }()
 
+    /// Ustawia proces na wierzchu POJEDYNCZEGO biurka, bez ruszania reszty.
+    ///
+    /// Potrzebne po przeskoku na inne biurko: przelaczenie zapisuje NASZ program
+    /// jako „ten na wierzchu" takze na biurku, z ktorego wyszlismy. Po powrocie
+    /// wyskakuje wtedy nie to okno, ktore tam bylo. Ta funkcja przywraca stan
+    /// poprzedniego biurka.
+    static let spaceSetFrontPSN: SpaceSetFrontPSN? = {
+        guard let pointer = symbol(["SLSSpaceSetFrontPSN"]) else { return nil }
+        return unsafeBitCast(pointer, to: SpaceSetFrontPSN.self)
+    }()
+
     static let postEventRecordTo: PostEventRecordTo? = {
         guard let pointer = symbol(["SLPSPostEventRecordTo"]) else { return nil }
         return unsafeBitCast(pointer, to: PostEventRecordTo.self)
@@ -72,6 +83,8 @@ enum SkyLight {
     }()
 
     /// Polaczenie z WindowServerem - jedno na proces, nigdy nie zamykane.
+    typealias SpaceSetFrontPSN = @convention(c) (Int32, UInt64, UnsafeMutablePointer<ProcessSerialNumber>) -> Int32
+
     static let connection: Int32? = mainConnectionID?()
 
     static var canReadSpaces: Bool {
@@ -198,7 +211,12 @@ enum WindowFocus {
               let post = SkyLight.postEventRecordTo else { return false }
         var psn = ProcessSerialNumber()
         guard processForPID(pid, &psn) == noErr else { return false }
-        guard setFront(&psn, windowID, userGenerated) == 0 else { return false }
+        // Wynik CELOWO nie przerywa dalszych krokow. WindowServer potrafi zwrocic
+        // niezerowy kod i mimo to wykonac przelaczenie, a nastepne kroki (zdarzenia
+        // „key" i podniesienie przez Accessibility) dokoncza robote. Przerywanie
+        // w tym miejscu konczylo sie sciezka zapasowa, ktora WRACALA na biurko,
+        // z ktorego wlasnie wyszlismy.
+        _ = setFront(&psn, windowID, userGenerated)
 
         // Dwa rekordy zdarzen (aktywacja okna i nadanie mu statusu "key") w ukladzie
         // bajtow znanym z Hammerspoon #370 i AltTab. Bez nich okno jest na wierzchu,
@@ -222,6 +240,19 @@ enum WindowFocus {
             }
         }
         return true
+    }
+
+    /// Przywraca program, ktory byl na wierzchu POPRZEDNIEGO biurka.
+    ///
+    /// Bez tego powrot na tamto biurko pokazuje nasze okno zamiast tego, ktore
+    /// tam bylo — bo przeskok zapisal nas jako „ten na wierzchu" takze tam.
+    static func przywrocPoprzednieBiurko(space: UInt64, pid: pid_t) {
+        guard let processForPID = SkyLight.processForPID,
+              let setFront = SkyLight.spaceSetFrontPSN,
+              let polaczenie = SkyLight.connection else { return }
+        var psn = ProcessSerialNumber()
+        guard processForPID(pid, &psn) == noErr else { return }
+        _ = setFront(polaczenie, space, &psn)
     }
 }
 
