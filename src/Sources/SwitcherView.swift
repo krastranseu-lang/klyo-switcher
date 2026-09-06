@@ -505,10 +505,16 @@ struct SwitcherView: View {
                 // wygladal jak plot z nierownych desek. Gora okna (pasek tytulu,
                 // karty, tresc) i tak niesie cala rozpoznawalnosc, wiec kadrujemy
                 // od gory - nic wartego zapamietania nie znika.
+                //
+                // Rozmiar podany WPROST, nie `maxWidth: .infinity`: obraz wypelniajacy
+                // kadr jest szerszy niz kadr, a wtedy „nieskonczona" szerokosc pozwala
+                // mu rozepchnac cala warstwe. Plakietka biurka i ikona programu, ktore
+                // stoja przy krawedziach, wyjezdzaly wtedy poza karte i system je
+                // przycinał - „Biurko 3" na ekranie konczylo sie jako „Biurko".
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .frame(width: HUDLayout.cardWidth - 18, height: HUDLayout.previewHeight, alignment: .top)
                     .clipped()
             } else if let icon = item.icon {
                 Image(nsImage: icon)
