@@ -29,11 +29,11 @@ enum ZdarzeniaPrzegladarki {
     private static func pozycja(klasa: OSType, numer: Int,
                                 w kontenerze: NSAppleEventDescriptor) -> NSAppleEventDescriptor {
         let rekord = NSAppleEventDescriptor.record()
-        rekord.setDescriptor(NSAppleEventDescriptor(typeCode: klasa), forKeyword: keyAEDesiredClass)
+        rekord.setDescriptor(NSAppleEventDescriptor(typeCode: klasa), forKeyword: AEKeyword(keyAEDesiredClass))
         rekord.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(formAbsolutePosition)),
-                             forKeyword: keyAEKeyForm)
-        rekord.setDescriptor(NSAppleEventDescriptor(int32: Int32(numer)), forKeyword: keyAEKeyData)
-        rekord.setDescriptor(kontenerze, forKeyword: keyAEContainer)
+                             forKeyword: AEKeyword(keyAEKeyForm))
+        rekord.setDescriptor(NSAppleEventDescriptor(int32: Int32(numer)), forKeyword: AEKeyword(keyAEKeyData))
+        rekord.setDescriptor(kontenerze, forKeyword: AEKeyword(keyAEContainer))
         return rekord.coerce(toDescriptorType: typeObjectSpecifier) ?? rekord
     }
 
@@ -55,7 +55,7 @@ enum ZdarzeniaPrzegladarki {
                 withEventClass: kod("CrSu"), eventID: kod("ExJa"), targetDescriptor: cel,
                 returnID: AEReturnID(kAutoGenerateReturnID),
                 transactionID: AETransactionID(kAnyTransactionID))
-            zdarzenie.setDescriptor(karta, forKeyword: keyDirectObject)
+            zdarzenie.setDescriptor(karta, forKeyword: AEKeyword(keyDirectObject))
             zdarzenie.setDescriptor(NSAppleEventDescriptor(string: kodJS), forKeyword: kod("JvSc"))
         case .safari:
             let karta = pozycja(klasa: kod("bTab"), numer: numerKarty, w: okno)
@@ -63,13 +63,13 @@ enum ZdarzeniaPrzegladarki {
                 withEventClass: kod("sfri"), eventID: kod("dojs"), targetDescriptor: cel,
                 returnID: AEReturnID(kAutoGenerateReturnID),
                 transactionID: AETransactionID(kAnyTransactionID))
-            zdarzenie.setDescriptor(NSAppleEventDescriptor(string: kodJS), forKeyword: keyDirectObject)
+            zdarzenie.setDescriptor(NSAppleEventDescriptor(string: kodJS), forKeyword: AEKeyword(keyDirectObject))
             zdarzenie.setDescriptor(karta, forKeyword: kod("dcnm"))
         }
 
         do {
             let odpowiedz = try zdarzenie.sendEvent(options: [.waitForReply], timeout: 1.2)
-            if let blad = odpowiedz.forKeyword(keyErrorNumber)?.int32Value, blad != 0 {
+            if let blad = odpowiedz.forKeyword(AEKeyword(keyErrorNumber))?.int32Value, blad != 0 {
                 return (nil, Int(blad))
             }
             return (odpowiedz.stringValue, 0)
