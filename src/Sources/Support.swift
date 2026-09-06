@@ -144,12 +144,28 @@ enum Permissions {
     /// nie ma dostepu, choc przelacznik w Ustawieniach jest wlaczony. Zamiast
     /// kazac czlowiekowi zamykac i otwierac program recznie, robimy to za niego.
     static func uruchomPonownie() {
-        let cel = URL(fileURLWithPath: Bundle.main.bundlePath)
-        let konfiguracja = NSWorkspace.OpenConfiguration()
-        konfiguracja.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: cel, configuration: konfiguracja) { _, _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.terminate(nil) }
-        }
+        // Nowa kopia programu musi wystartowac PO tym, jak ta sie zamknie.
+        //
+        // Proba uruchomienia drugiej kopii, gdy pierwsza jeszcze zyje, konczy sie
+        // niczym: macOS uznaje, ze program juz dziala, a nasz wlasny bezpiecznik
+        // przed podwojnym uruchomieniem zamyka przybysza. Efekt jest taki, jaki
+        // zglosil uzytkownik: „uruchom ponownie i nie otwiera sie od nowa".
+        //
+        // Dlatego start zleca sie osobnemu poleceniu powloki, ktore przezyje nasze
+        // zamkniecie: czeka, az proces zniknie, i dopiero wtedy otwiera program.
+        let sciezka = Bundle.main.bundlePath
+        let polecenie = """
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          /usr/bin/pgrep -x KlyoSwitcher >/dev/null 2>&1 || break
+          sleep 1
+        done
+        /usr/bin/open -n \(sciezka.shellEscaped())
+        """
+        let proces = Process()
+        proces.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proces.arguments = ["-c", "nohup /bin/bash -c \(polecenie.shellEscaped()) >/dev/null 2>&1 &"]
+        try? proces.run()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
     }
 
     static func openAccessibilitySettings() {
