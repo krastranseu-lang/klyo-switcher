@@ -449,30 +449,36 @@ enum WindowActivator {
         }
 
         if naInnymBiurku {
-            // BIURKAMI ZARZADZA SYSTEM, NIE MY.
+            // PRZENOSIMY UZYTKOWNIKA, NIGDY OKNO.
             //
-            // Decyzja wlasciciela projektu po tym, jak wlasna mechanika biurek
-            // narobila szkody: „biurek raczej nie ruszamy, nasz jedyny interfejs
-            // to ⌘ Tab". Zostaje wiec dokladnie to, co robi macOS, gdy klikniesz
-            // ikone w Docku - aktywacja programu. To system decyduje, czy przejsc
-            // na biurko okna; robi tak, gdy w Ustawieniach systemowych zaznaczone
-            // jest „Przy przelaczaniu programu przejdz na biurko z jego oknami".
+            // Decyzja wlasciciela projektu, podjeta po tym, jak wczesniejsza wersja
+            // porozrzucala mu okna po biurkach: wybor okna z innego biurka ma
+            // przeniesc CZLOWIEKA na tamto biurko. Nie dokladamy przy tym zadnego
+            // interfejsu - jedynym pozostaje ⌘ Tab.
             //
-            // Czego NIE robimy i dlaczego:
-            //   - nie skaczemy prywatna funkcja WindowServera (`skoczNaBiurko`),
-            //     bo to omijanie systemu, a nie korzystanie z niego,
-            //   - nie udajemy Ctrl+strzalek (`SkrotBiurka`), bo to wchodzenie
-            //     z butami w cudze skroty klawiszowe,
-            //   - nie dotykamy okna, dopoki system nie potwierdzi, ze stoimy na
-            //     jego biurku - podniesienie wykonane za wczesnie przynosi OKNO
-            //     do nas, zamiast nas do okna, i to wlasnie porozrzucalo okna.
-            // Oba narzedzia zostaja w kodzie (Spaces.swift) - nieuzywane, ale
-            // gotowe, gdyby kiedys byly potrzebne swiadomie.
-            DziennikBiurek.zapisz("okno na innym biurku - oddaje decyzje systemowi (aktywacja programu)")
-            activateApp(pid: pid)
+            // Zasady, ktore z tego wynikaja:
+            //   - okna NIE WOLNO tknac, dopoki system nie potwierdzi, ze stoimy juz
+            //     na jego biurku; podniesienie wykonane wczesniej przynosi OKNO
+            //     do nas, zamiast nas do okna - to wlasnie bylo zrodlo balaganu,
+            //   - biurko zmieniamy jednym wywolaniem systemu (`skoczNaBiurko`),
+            //     tym samym, ktorego uzywa Mission Control,
+            //   - NIE udajemy Ctrl+strzalek: to wchodzenie z butami w cudze skroty.
+            //     Ten kod zostaje w `Spaces.swift`, ale odzywa sie tylko przy
+            //     ukrytym ustawieniu `wlasnaMechanikaBiurek`,
+            //   - gdy biurko sie nie potwierdzi, program NIE ROBI NIC. Lepiej nie
+            //     przelaczyc, niz wyrwac komus okno z drugiego biurka.
             guard let cel = biurkoOkna else {
                 DziennikBiurek.zapisz("nie znam biurka okna - zostawiam sprawe systemowi")
+                activateApp(pid: pid)
                 return
+            }
+            // Droga glowna: prosba do systemu o zmiane biurka. Jedno wywolanie,
+            // to samo, ktorego uzywa Mission Control - przenosi UZYTKOWNIKA.
+            // Okna nie dotyka ani teraz, ani nigdy.
+            if !WindowFocus.skoczNaBiurko(cel, mapa: mapa) {
+                // Skok niedostepny - zostaje aktywacja programu i decyzja systemu.
+                DziennikBiurek.zapisz("skok niedostepny - oddaje decyzje systemowi (aktywacja programu)")
+                activateApp(pid: pid)
             }
             poczekajNaBiurko(cel, prob: 12) {
                 DziennikBiurek.zapisz("system przeszedl na biurko okna: \(DziennikBiurek.stanBiurek())")
