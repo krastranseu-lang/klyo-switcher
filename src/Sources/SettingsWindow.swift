@@ -203,6 +203,7 @@ final class SettingsStore: ObservableObject {
         spacesMode = Settings.spacesMode
         tabLimit = Settings.tabLimitPerWindow
         thumbnails = Settings.showThumbnails
+        trybPodgladu = Settings.trybPodgladu
         historiaSchowka = Settings.historiaSchowkaWlaczona
         limitHistorii = Settings.limitHistoriiSchowka
         skrotSchowka = Settings.skrotHistoriiSchowka
@@ -522,6 +523,10 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(store.przelaczajBiurka ? .secondary : Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Pod kursorem") {
+                    WyborTrybuPodgladu(wybor: $store.trybPodgladu)
                 }
 
                 section("Wygląd listy") {

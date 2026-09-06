@@ -455,6 +455,7 @@ enum Settings {
         static let limitHistorii = "limitHistoriiSchowka"
         static let skrotSchowka = "skrotHistoriiSchowka"
         static let skrotCzystegoTekstu = "skrotCzystegoTekstu"
+        static let trybPodgladu = "trybPodgladuPodKursorem"
         static let wklejajCzysty = "wklejajCzystyTekst"
         static let wklejajPrzycinaj = "wklejajPrzycinajSpacje"
         static let wklejajBezDoczepek = "wklejajBezDoczepek"
@@ -470,6 +471,7 @@ enum Settings {
             Key.spacesMode: SpacesMode.allDesktops.rawValue,
             Key.tabLimit: 6,
             Key.thumbnails: true,
+            Key.trybPodgladu: TrybPodgladu.duzy.rawValue,
             Key.launchAtLogin: true,
             Key.didBootstrap: false,
             Key.screenshotEnabled: true,
@@ -575,6 +577,13 @@ enum Settings {
     static var historiaSchowkaWlaczona: Bool {
         get { defaults.bool(forKey: Key.historiaSchowka) }
         set { defaults.set(newValue, forKey: Key.historiaSchowka) }
+    }
+
+    /// Co program pokazuje, gdy kursor stanie na karcie - wybierane RYSUNKIEM
+    /// w ustawieniach, nie opisem.
+    static var trybPodgladu: TrybPodgladu {
+        get { TrybPodgladu(rawValue: defaults.string(forKey: Key.trybPodgladu) ?? "") ?? .duzy }
+        set { defaults.set(newValue.rawValue, forKey: Key.trybPodgladu) }
     }
 
     /// Wlasna mechanika przechodzenia miedzy biurkami (skok prywatna funkcja

@@ -64,6 +64,9 @@ final class SwitcherController {
         model.onQuit = { [weak self] index in
             self?.quitApplication(at: index, force: false)
         }
+        model.onPrzypnij = { [weak self] index in
+            self?.przelaczUlubione(at: index)
+        }
 
         // Sesja "trwa" takze w oknie miedzy zamowieniem listy a jej pokazaniem - inaczej
         // puszczenie modyfikatora przy szybkim ⌘⇥ trafialoby w prozni i HUD zostawalby otwarty.
@@ -88,6 +91,9 @@ final class SwitcherController {
         }
         hotkey.onCommit = { [weak self] in self?.commit() }
         hotkey.onCancel = { [weak self] in self?.cancel() }
+        hotkey.onPrzypnijUlubione = { [weak self] in
+            self?.przelaczUlubione(at: self?.model.selection ?? 0)
+        }
         hotkey.onCloseSelected = { [weak self] in
             guard let self else { return }
             self.closeItem(at: self.model.selection)
@@ -142,6 +148,20 @@ final class SwitcherController {
         WindowActions.close(item)
         remove(indexes: [index])
         browsers.refresh(after: 0.6)
+    }
+
+    /// Przypiecie programu wybranej karty do ulubionych albo cofniecie przypiecia.
+    /// Lista przerysowuje sie od razu, wiec czlowiek widzi skutek, zanim puscil ⌘.
+    private func przelaczUlubione(at index: Int) {
+        guard sessionActive, model.items.indices.contains(index) else { return }
+        let pozycja = model.items[index]
+        guard !pozycja.bundleID.isEmpty else { return }
+        let przypiety = Ulubione.przelaczPrzypiecie(pozycja.bundleID)
+        model.odswiezUlubione()
+        ToastPresenter.shared.show(
+            przypiety ? "\(pozycja.subtitle) w ulubionych" : "\(pozycja.subtitle) już nie w ulubionych",
+            symbol: przypiety ? "star.fill" : "star.slash"
+        )
     }
 
     private func quitApplication(at index: Int, force: Bool) {
@@ -460,7 +480,7 @@ final class SwitcherController {
     /// na ktorej kursor ZOSTAL.
     private func zamowDuzyPodglad(_ identyfikator: String?) {
         podgladToken?.cancel()
-        guard let identyfikator,
+        guard let identyfikator, Settings.trybPodgladu == .duzy,
               Settings.showThumbnails, Permissions.screenRecordingGranted,
               let pozycja = model.items.first(where: { $0.id == identyfikator }),
               pozycja.windowID != 0 else {

@@ -280,12 +280,56 @@ enum Ulubione {
         let liczniki = UserDefaults.standard.dictionary(forKey: kluczLicznikow) as? [String: Int] ?? [:]
         // Gwiazdka ma znaczyc „wracasz tu naprawde czesto". Przy dwoch wyborach
         // nie znaczy nic - dlatego prog minimalny.
-        let wynik = liczniki
+        let policzone = liczniki
             .filter { $0.value >= 3 }
             .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
-            .prefix(ile)
             .map(\.key)
-        pamiec = Array(wynik)
+        // Przypiete RECZNIE ida pierwsze i nie daja sie wypchnac przez liczniki -
+        // decyzja czlowieka wazy wiecej niz statystyka. Reszte miejsc dopelnia
+        // czolowka liczona z uzycia.
+        var wynik = przypiete
+        for identyfikator in policzone where !wynik.contains(identyfikator) {
+            guard wynik.count < ile else { break }
+            wynik.append(identyfikator)
+        }
+        pamiec = Array(wynik.prefix(ile))
         return pamiec ?? []
+    }
+
+    // MARK: - Przypinanie reczne
+
+    private static let kluczPrzypietych = "ulubione.przypiete"
+
+    /// Programy przypiete recznie, w kolejnosci przypinania.
+    ///
+    /// Do 1.43.0 ulubionych nie dalo sie ani dodac, ani cofnac - program liczyl je
+    /// sam. Znak byl, sterowania nim nie bylo, wiec pytanie „jak dodac i jak
+    /// wycofac" nie mialo odpowiedzi. Teraz ma: ⌘D na karcie albo klikniecie
+    /// gwiazdki.
+    static var przypiete: [String] {
+        UserDefaults.standard.stringArray(forKey: kluczPrzypietych) ?? []
+    }
+
+    static func czyPrzypiety(_ identyfikator: String) -> Bool {
+        przypiete.contains(identyfikator)
+    }
+
+    /// Przypina program albo cofa przypiecie. Zwraca stan PO zmianie.
+    @discardableResult
+    static func przelaczPrzypiecie(_ identyfikator: String) -> Bool {
+        guard !identyfikator.isEmpty else { return false }
+        var lista = przypiete
+        let bylo = lista.contains(identyfikator)
+        if let miejsce = lista.firstIndex(of: identyfikator) {
+            lista.remove(at: miejsce)
+        } else {
+            lista.append(identyfikator)
+            // Miejsca sa trzy i tyle zostaje: czwarte przypiecie wypycha najstarsze,
+            // zeby wyroznienie dalej cokolwiek znaczylo.
+            if lista.count > ile { lista.removeFirst(lista.count - ile) }
+        }
+        UserDefaults.standard.set(lista, forKey: kluczPrzypietych)
+        pamiec = nil
+        return !bylo
     }
 }

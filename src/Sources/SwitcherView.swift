@@ -83,6 +83,15 @@ final class SwitcherModel: ObservableObject {
     var onPick: ((Int) -> Void)?
     var onClose: ((Int) -> Void)?
     var onQuit: ((Int) -> Void)?
+    var onPrzypnij: ((Int) -> Void)?
+    /// Licznik przerysowania po zmianie ulubionych - `Ulubione` trzyma stan poza
+    /// modelem, wiec SwiftUI nie ma jak sam zauwazyc, ze gwiazdka sie przeniosla.
+    @Published var wersjaUlubionych = 0
+
+    func odswiezUlubione() {
+        Ulubione.odswiez()
+        wersjaUlubionych &+= 1
+    }
 
     var rows: [[SwitcherItem]] {
         guard columns > 0, !items.isEmpty else { return [] }
@@ -266,6 +275,15 @@ struct SwitcherView: View {
         .shadow(color: Color.black.opacity(0.26), radius: 38, y: 16)
     }
 
+    /// O ile rosnie karta pod kursorem - zalezy od wybranego rysunkiem wariantu.
+    private var skalaPodKursorem: CGFloat {
+        switch Settings.trybPodgladu {
+        case .duzy: return 1.12          // czytelnosc bierze na siebie duzy podglad
+        case .powiekszenie: return 1.34  // cala robota robi sama karta
+        case .brak: return 1.0
+        }
+    }
+
     // MARK: - Duzy podglad okna pod kursorem
 
     /// Panel z ostrym zrzutem okna, ktore jest pod kursorem.
@@ -277,7 +295,8 @@ struct SwitcherView: View {
     /// specjalnie dla niego, wiec tekst w oknie da sie przeczytac.
     @ViewBuilder
     private var duzyPodglad: some View {
-        if let podglad = model.duzyPodglad, let pozycja = model.items.first(where: { $0.id == podglad.id }) {
+        if Settings.trybPodgladu == .duzy, let podglad = model.duzyPodglad,
+           let pozycja = model.items.first(where: { $0.id == podglad.id }) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(nsImage: podglad.obraz)
                     .resizable()
@@ -391,6 +410,7 @@ struct SwitcherView: View {
             hint("\(symbol)1–9", "skok")
             hint("pisz", "szukaj")
             hint("⌘⇧V", "schowek")
+            hint("\(symbol)D", "ulubione")
             hint("\(symbol)W", "zamknij okno")
             hint("\(symbol)Q", "zakończ aplikację")
             hint("esc", "anuluj")
@@ -531,10 +551,11 @@ struct SwitcherView: View {
         // Karta pod kursorem podnosi sie lekko - to sygnal „tu jestes". Czytelnosc
         // zapewnia DUZY PODGLAD na srodku panelu, wiec karty nie trzeba juz
         // rozdymac; przy krawedzi panelu i tak zostalaby przycieta.
-        .scaleEffect(podKursorem ? 1.12 : (isSelected ? 1.035 : 1.0))
+        .scaleEffect(podKursorem ? skalaPodKursorem : (isSelected ? 1.035 : 1.0))
         .shadow(color: Color.black.opacity(podKursorem ? 0.34 : 0), radius: podKursorem ? 22 : 0, y: podKursorem ? 10 : 0)
         .zIndex(podKursorem ? 2 : (isSelected ? 1 : 0))
         .animation(.spring(response: 0.24, dampingFraction: 0.8), value: podKursorem)
+        .id("\(item.id)#\(model.wersjaUlubionych)")
         .contentShape(Rectangle())
         .onTapGesture {
             if let index = model.index(of: item.id) {
@@ -634,10 +655,29 @@ struct SwitcherView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
 
-            if model.pierwszeKarty.contains(item.id), let miejsce = Ulubione.miejsce(programu: item.bundleID) {
-                gwiazdkaUlubionego(miejsce)
-                    .padding(5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            if model.pierwszeKarty.contains(item.id), !item.bundleID.isEmpty {
+                let miejsce = Ulubione.miejsce(programu: item.bundleID)
+                Button {
+                    if let index = model.index(of: item.id) { model.onPrzypnij?(index) }
+                } label: {
+                    if let miejsce {
+                        gwiazdkaUlubionego(miejsce)
+                    } else {
+                        // Pusta gwiazdka pojawia sie pod kursorem - zeby dalo sie
+                        // dodac program do ulubionych jednym klikiem, bez szukania
+                        // ustawien. Bez kursora nie zasmieca listy.
+                        Image(systemName: "star")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .padding(3)
+                            .background(Circle().fill(Color.black.opacity(0.35)))
+                            .opacity(podKursorem ? 1 : 0)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help(miejsce == nil ? "Dodaj do ulubionych (⌘D)" : "Usuń z ulubionych (⌘D)")
+                .padding(5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
             if let label = item.place.label {

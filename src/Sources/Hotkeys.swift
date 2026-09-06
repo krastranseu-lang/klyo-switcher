@@ -32,6 +32,7 @@ final class HotkeyRouter {
         static let q: Int64 = 12
         static let backspace: Int64 = 51
         static let v: Int64 = 9
+        static let d: Int64 = 2
     }
 
     /// Klawisze 1…9 w gornym rzedzie - skok do pozycji na liscie.
@@ -57,6 +58,8 @@ final class HotkeyRouter {
     /// bez niej podsluch przechwycilby je jeszcze raz i program krecilby sie w kolko.
     var pomijamWklejenie = false
     var onAppShortcut: ((AppShortcut) -> Void)?
+    /// ⌘D na otwartej liscie - przypiecie programu do ulubionych albo cofniecie.
+    var onPrzypnijUlubione: (() -> Void)?
     var onCloseSelected: (() -> Void)?
     /// `true` = wymuszone zakonczenie (⌥ razem z Q) - dla aplikacji, ktora nie odpowiada.
     var onQuitSelected: ((Bool) -> Void)?
@@ -265,6 +268,10 @@ final class HotkeyRouter {
                 case Key.q:
                     guard flags.contains(switcherModifier) else { return Unmanaged.passUnretained(event) }
                     onQuitSelected?(flags.contains(.maskAlternate))
+                    return nil
+                case Key.d:
+                    guard flags.contains(switcherModifier) else { return Unmanaged.passUnretained(event) }
+                    onPrzypnijUlubione?()
                     return nil
                 case Key.backspace:
                     onKasujZnak?()
