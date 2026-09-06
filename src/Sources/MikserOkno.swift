@@ -112,7 +112,17 @@ final class ModelMiksera: ObservableObject {
     /// Wycisza pojedyncza karte - i od razu pyta o stan, bo przegladarka
     /// przerysowuje swoj pasek dopiero po chwili.
     func przelaczKarte(_ karta: KartaGrajaca) {
-        KartyDzwieku.przelaczWyciszenie(karta)
+        let bylaWyciszona = karta.wyciszona
+        // Zapamietujemy WYNIK po swojej stronie, bo przegladarka go nie odda:
+        // Chrome oznacza tylko karty grajace, wiec zaraz po wyciszeniu karta
+        // przestaje byc rozpoznawalna. To jest cala usterka „nie wraca".
+        if KartyDzwieku.przelaczWyciszenie(karta) {
+            if bylaWyciszona {
+                GlosnoscKarty.zapomnij(karta)
+            } else {
+                GlosnoscKarty.zapamietajWyciszenie(karta)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.odswiez() }
     }
 

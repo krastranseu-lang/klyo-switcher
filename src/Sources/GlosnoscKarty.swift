@@ -93,6 +93,14 @@ enum GlosnoscKarty {
 
     static func zapomnij(_ karta: KartaGrajaca) { poziomy.removeValue(forKey: klucz(karta)) }
 
+    /// Zapamietuje wyciszenie zrobione INNA droga niz suwak - przyciskiem na
+    /// karcie (Safari) albo pozycja w menu (Chrome).
+    ///
+    /// Bez tego usterka „wylaczylem dzwiek i juz nie wraca" zostawalaby w polowie
+    /// naprawiona: suwak pamietalby swoje, a glosnik nie - i karta wyciszona
+    /// glosnikiem dalej znikalaby z listy.
+    static func zapamietajWyciszenie(_ karta: KartaGrajaca) { poziomy[klucz(karta)] = 0 }
+
     // MARK: Ustawianie
 
     @discardableResult
