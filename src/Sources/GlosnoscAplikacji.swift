@@ -24,11 +24,22 @@ enum GlosnoscAplikacji {
 
     static var wyciszone: Set<pid_t> { Set(tapy.keys) }
 
+    /// Czy ten system w ogole umie wyciszyc pojedynczy program.
+    ///
+    /// Przechwycenie procesu istnieje od macOS 14.2. Na starszych glosnik na
+    /// karcie zostaje ZNAKIEM (widac, co gra), ale nie udaje przycisku - lepiej
+    /// nie dac funkcji, niz dac taka, ktora nic nie robi.
+    static var dostepne: Bool {
+        if #available(macOS 14.2, *) { return true }
+        return false
+    }
+
     static func czyWyciszony(pid: pid_t) -> Bool { tapy[pid] != nil }
 
     /// Wycisza program albo przywraca mu dzwiek. Zwraca stan PO zmianie.
     @discardableResult
     static func przelaczWyciszenie(pid: pid_t) -> Bool {
+        guard #available(macOS 14.2, *) else { return false }
         if let tap = tapy.removeValue(forKey: pid) {
             AudioHardwareDestroyProcessTap(tap)
             return false
@@ -50,6 +61,7 @@ enum GlosnoscAplikacji {
     /// Zdejmuje WSZYSTKIE wyciszenia. Wolane przy zamykaniu programu, zeby
     /// nie zostawic czyjegos dzwieku wyciszonego po naszym zniknieciu.
     static func przywrocWszystkie() {
+        guard #available(macOS 14.2, *) else { tapy.removeAll(); return }
         for (_, tap) in tapy { AudioHardwareDestroyProcessTap(tap) }
         tapy.removeAll()
     }
@@ -57,6 +69,7 @@ enum GlosnoscAplikacji {
     /// Program, ktory zniknal, nie musi juz byc wyciszany - a jego tap zajmuje
     /// miejsce w serwerze dzwieku.
     static func posprzatajPoZamknietych() {
+        guard #available(macOS 14.2, *) else { return }
         for (pid, tap) in tapy where NSRunningApplication(processIdentifier: pid) == nil {
             AudioHardwareDestroyProcessTap(tap)
             tapy.removeValue(forKey: pid)

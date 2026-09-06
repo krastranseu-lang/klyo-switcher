@@ -745,6 +745,7 @@ struct SwitcherView: View {
                 || GlosnoscAplikacji.czyWyciszony(pid: item.pid) {
                 let wyciszony = GlosnoscAplikacji.czyWyciszony(pid: item.pid)
                 Button {
+                    guard GlosnoscAplikacji.dostepne else { return }
                     if let index = model.index(of: item.id) { model.onWyciszenie?(index) }
                 } label: {
                     Image(systemName: wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -756,7 +757,9 @@ struct SwitcherView: View {
                                                   : Color.accentColor.opacity(0.92)))
                 }
                 .buttonStyle(.plain)
-                .help(wyciszony ? "Przywróć dźwięk (⌘M)" : "Wycisz ten program (⌘M)")
+                .help(GlosnoscAplikacji.dostepne
+                      ? (wyciszony ? "Przywróć dźwięk (⌘M)" : "Wycisz ten program (⌘M)")
+                      : "Ten program gra (wyciszanie wymaga macOS 14.2)")
                 .padding(4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
