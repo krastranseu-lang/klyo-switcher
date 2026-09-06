@@ -57,14 +57,42 @@ jobs:
           cp -R "/Applications/Klyo Switcher.app" "/Applications/Klyo Switcher 5.app"
           ls -d /Applications/Klyo*.app
 
-      - name: AKTUALIZACJA — to samo, co zrobi program u człowieka
-        env:
-          KLYO_BEZ_STARTU: "1"   # maszyna budująca nie ma pulpitu
+      - name: Uruchom starą wersję — aktualizacja musi zastać DZIAŁAJĄCY program
+        run: |
+          set -uo pipefail
+          # Bez tego kroku sprawdzalibyśmy podmianę martwego pliku, a u człowieka
+          # aktualizacja zawsze zastaje program uruchomiony i musi go zamknąć.
+          xattr -dr com.apple.quarantine "/Applications/Klyo Switcher.app" || true
+          open -n "/Applications/Klyo Switcher.app" || true
+          sleep 6
+          pgrep -x KlyoSwitcher >/dev/null && echo "  ✓ stara wersja działa" || echo "  ⚠ stara wersja nie wystartowała"
+
+      - name: AKTUALIZACJA — to samo, co zrobi program u człowieka, ZE STARTEM
         run: |
           set -euo pipefail
           suma=$(shasum -a 256 proba/nowa.zip | awk '{print $1}')
           chmod +x src/aktualizuj.sh
+          # ŻADNEGO pomijania startu: to właśnie start zawodzi u człowieka
+          # („kliknąłem aktualizuj i się nie otwiera"), więc to on musi być sprawdzony.
           src/aktualizuj.sh "$PWD/proba/nowa.zip" "/Applications/Klyo Switcher.app" "$suma"
+
+      - name: Czy po aktualizacji program NAPRAWDĘ działa
+        run: |
+          set -uo pipefail
+          bledy=0
+          if pgrep -x KlyoSwitcher >/dev/null; then
+            echo "  ✓ program działa po aktualizacji"
+          else
+            echo "  ✗ PROGRAM NIE WSTAŁ PO AKTUALIZACJI — to jest usterka, którą zgłasza użytkownik"
+            bledy=1
+          fi
+          echo "— dziennik aktualizacji —"
+          cat /tmp/klyo-switcher-update.log 2>/dev/null | sed 's/^/    /' || echo "    (brak dziennika)"
+          w=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "/Applications/Klyo Switcher.app/Contents/Info.plist" 2>/dev/null || echo "?")
+          echo "  wersja na dysku: $w"
+          [ "$w" = "${NOWA}" ] || { echo "  ✗ oczekiwano ${NOWA}"; bledy=1; }
+          pkill -x KlyoSwitcher || true
+          [ "$bledy" = "0" ] || exit 1
 
       - name: Sprawdź, co naprawdę stoi na dysku
         run: |
@@ -123,8 +151,6 @@ jobs:
           echo; echo "AKTUALIZACJA DZIAŁA"
 
       - name: Próba negatywna — uszkodzona paczka nie może zabrać programu
-        env:
-          KLYO_BEZ_STARTU: "1"
         run: |
           set -uo pipefail
           echo "psuję paczkę i próbuję zaktualizować"
@@ -146,8 +172,6 @@ jobs:
           echo "  ✓ program nietknięty — uszkodzona paczka odrzucona bez szkody"
 
       - name: Próba negatywna — podmieniona suma kontrolna
-        env:
-          KLYO_BEZ_STARTU: "1"
         run: |
           set -uo pipefail
           chmod +x src/aktualizuj.sh
