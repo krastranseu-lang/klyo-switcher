@@ -75,6 +75,10 @@ enum Dzwiek {
             // Sam proces i cala jego linia rodzicow: dzwiek zglasza pomocnik,
             // a czlowiek szuka programu, ktory widzi na ekranie.
             wynik.insert(pid)
+            // Program, do ktorego ten proces nalezy wedlug SYSTEMU - jedyna droga
+            // dla uslug spod launchd (Safari, WebKit).
+            let program = programProcesu(pid)
+            if program != pid { wynik.insert(program) }
             for przodek in przodkowie(pid) { wynik.insert(przodek) }
         }
         return wynik
@@ -130,16 +134,44 @@ enum Dzwiek {
     // (`com.google.Chrome`), w ktory czlowiek klika w mikserze. Wyciszanie
     // po samym pidzie programu nie mialo prawa zadzialac i nie dzialalo.
 
-    /// Program i wszyscy jego potomkowie.
+    /// Proces, ktory system uwaza za ODPOWIEDZIALNY za dany proces.
+    ///
+    /// To jest wlasciwa droga, a nie chodzenie po rodzicach. Zmierzone: procesy
+    /// pomocnicze Safari maja rodzica `launchd` (ppid 1), wiec drzewo procesow
+    /// NIE laczy ich z Safari - a system laczy:
+    ///     70315 (WebKit.GPU)    → 70292 Safari
+    ///      2950 (Chrome helper) →   671 Chrome
+    /// Funkcja jest w libSystem i uzywa jej sam macOS (widac ja w dzienniku TCC
+    /// jako „responsible"); bierzemy ja przez `dlsym`, zeby jej ewentualny brak
+    /// byl brakiem funkcji, a nie odmowa uruchomienia programu.
+    private static let odpowiedzialnyZa: ((pid_t) -> pid_t)? = {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
+                                 "responsibility_get_pid_responsible_for_pid") else { return nil }
+        typealias Funkcja = @convention(c) (pid_t) -> pid_t
+        let funkcja = unsafeBitCast(symbol, to: Funkcja.self)
+        return { funkcja($0) }
+    }()
+
+    /// Program, do ktorego nalezy ten proces - albo on sam.
+    static func programProcesu(_ pid: pid_t) -> pid_t {
+        guard let odpowiedzialny = odpowiedzialnyZa?(pid), odpowiedzialny > 1 else { return pid }
+        return odpowiedzialny
+    }
+
+    /// Program i wszystkie procesy, za ktore odpowiada.
     static func rodzina(_ korzen: pid_t) -> Set<pid_t> {
         var rodzice: [pid_t: pid_t] = [:]
         for proces in spisProcesow() {
             rodzice[proces.kp_proc.p_pid] = proces.kp_eproc.e_ppid
         }
         var wynik: Set<pid_t> = [korzen]
-        // Idziemy od kazdego procesu w GORE do korzenia - drzewo bywa glebokie
-        // (helper helpera), a ta droga jest krotsza niz budowanie listy dzieci.
         for (dziecko, _) in rodzice {
+            // Najpierw pytamy system, czyj to proces - to lapie takze uslugi
+            // uruchamiane przez launchd, ktorych po rodzicach nie da sie znalezc.
+            if programProcesu(dziecko) == korzen {
+                wynik.insert(dziecko)
+                continue
+            }
             var biezacy = dziecko
             for _ in 0..<8 {
                 guard let rodzic = rodzice[biezacy], rodzic > 1 else { break }

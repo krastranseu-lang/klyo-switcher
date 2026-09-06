@@ -18,10 +18,28 @@ enum SondaDzwieku {
     static var zadana: Bool {
         let a = CommandLine.arguments
         return a.contains("--co-gra") || a.contains("--wycisz") || a.contains("--glosnosc")
+            || a.contains("--karty")
     }
 
     static func wykonaj() {
         let argumenty = CommandLine.arguments
+
+        // `--karty` mierzy sam odczyt kart przez Dostepnosc: ile okien, ile kart,
+        // czy program w ogole ma zaufanie. Bez tego „nie widac kart" nie mowi nic.
+        if argumenty.contains("--karty") {
+            for program in NSWorkspace.shared.runningApplications {
+                guard let identyfikator = program.bundleIdentifier,
+                      BrowserSupport.isSupported(identyfikator) else { continue }
+                let wynik = KartyDzwieku.policz(pid: program.processIdentifier)
+                print("\(program.localizedName ?? identyfikator): okien \(wynik.okna), kart \(wynik.karty), zaufanie \(wynik.zaufanie ? "TAK" : "NIE")")
+            }
+            let grajace = Dzwiek.grajace()
+            for karta in KartyDzwieku.grajace(wsrodGrajacych: grajace) {
+                print("  gra: \(karta.program) — \(karta.tytul)\(karta.wyciszona ? " [wyciszona]" : "")")
+            }
+            exit(0)
+        }
+
         wypiszGrajace()
 
         // `--glosnosc <pid> <procent>` ustawia poziom TEGO programu; `--wycisz <pid>`

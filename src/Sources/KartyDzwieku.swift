@@ -219,9 +219,21 @@ enum KartyDzwieku {
         CGEvent(keyboardEventSource: zrodlo, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
     }
 
+    /// Odczyt atrybutu - przez wspolny pomocnik programu, nie wlasny.
+    /// Wlasna kopia byla druga wersja tej samej rzeczy i rozjechalaby sie
+    /// przy pierwszej poprawce w tamtej.
     private static func wartosc(_ element: AXUIElement, _ atrybut: String) -> Any? {
-        var wynik: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, atrybut as CFString, &wynik) == .success else { return nil }
-        return wynik
+        axCopy(element, atrybut)
+    }
+
+    /// Ile czego widac - dla sondy. „Zero kart" i „zero okien" to dwie rozne
+    /// usterki, a bez licznika wygladaja tak samo.
+    static func policz(pid: pid_t) -> (okna: Int, karty: Int, zaufanie: Bool) {
+        let aplikacja = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(aplikacja, 0.6)
+        let okna = (wartosc(aplikacja, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+        var karty = 0
+        for okno in okna { karty += paskiKart(okno).count }
+        return (okna.count, karty, AXIsProcessTrusted())
     }
 }
