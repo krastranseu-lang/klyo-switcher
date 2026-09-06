@@ -23,6 +23,20 @@ enum Dzwiek {
 
     static func odswiez() { czas = 0 }
 
+    /// Wszystkie procesy TEGO programu - po tozsamosci, nie po numerze.
+    ///
+    /// Sam numer procesu nie wystarcza: sonda uruchomiona obok dzialajacego
+    /// przelacznika to druga kopia tego samego programu i tez nie ma czego
+    /// szukac na liscie cudzych zrodel dzwieku.
+    static func nasze() -> Set<pid_t> {
+        var wynik: Set<pid_t> = [ProcessInfo.processInfo.processIdentifier]
+        guard let nasz = Bundle.main.bundleIdentifier else { return wynik }
+        for program in NSRunningApplication.runningApplications(withBundleIdentifier: nasz) {
+            wynik.insert(program.processIdentifier)
+        }
+        return wynik
+    }
+
     /// Czy ten program (albo ktorykolwiek z jego procesow pomocniczych) gra.
     static func gra(pid: pid_t) -> Bool {
         grajace().contains(pid)
@@ -50,7 +64,7 @@ enum Dzwiek {
         // Technicznie prawda, dla czlowieka bez sensu, a w skutkach zgubna:
         // program pokazywal sie na wlasnej liscie, a suwak przy tej pozycji
         // zakladal przechwycenie na WLASNYM wyjsciu i wyciszal wszystko naraz.
-        pamiec = zbierz().subtracting([ProcessInfo.processInfo.processIdentifier])
+        pamiec = zbierz().subtracting(nasze())
         return pamiec
     }
 

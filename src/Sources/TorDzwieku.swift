@@ -68,7 +68,7 @@ final class TorDzwieku {
         // Tor na WLASNY proces to petla: przechwycilby dzwiek, ktory sam
         // odtwarza, i wyciszyl go u zrodla. Zmierzone na zywym systemie -
         // po ustawieniu suwaka przy pozycji „Klyo Switcher" milklo wszystko.
-        guard pid != ProcessInfo.processInfo.processIdentifier else { return nil }
+        guard !Dzwiek.nasze().contains(pid) else { return nil }
         self.pid = pid
         self.wzmocnienie = wzmocnienie
         self.wzmocnienieAtomowe = max(0, min(2.0, wzmocnienie))
