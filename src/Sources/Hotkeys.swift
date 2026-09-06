@@ -297,7 +297,7 @@ final class HotkeyRouter {
             if wklejanieWlaczone, keyCode == Key.v, flags.contains(.maskCommand),
                !flags.contains(.maskShift), !flags.contains(.maskAlternate),
                !flags.contains(.maskControl) {
-                if pomijamWklejenie { return Unmanaged.passUnretained(event) }
+                if pomijamWklejenie || Wklejanie.nasze(event) { return Unmanaged.passUnretained(event) }
                 onWklejenie?()
                 return nil
             }

@@ -17,7 +17,22 @@ import AppKit
 // ten kod NIE dotyka klawiatury ani schowka - `wlaczone` jest wtedy `false`
 // i podsluch nawet nie pyta o litere V.
 
-enum Wklejanie {
+extension Wklejanie {
+    /// Znak wlasny odciskany na zdarzeniach, ktore sami wysylamy.
+    ///
+    /// Bez niego podsluch przechwytywalby WLASNE ⌘V - i to nie tylko z tego pliku:
+    /// historia schowka tez wysyla ⌘V po wybraniu wpisu. Zwykla flaga „teraz pomijaj"
+    /// nie wystarczy, bo nie wie, ktore zdarzenie jest czyje.
+    static let znakWlasny: Int64 = 0x4B4C_594F   // "KLYO"
+
+    static func oznacz(_ zdarzenie: CGEvent?) {
+        zdarzenie?.setIntegerValueField(.eventSourceUserData, value: znakWlasny)
+    }
+
+    static func nasze(_ zdarzenie: CGEvent) -> Bool {
+        zdarzenie.getIntegerValueField(.eventSourceUserData) == znakWlasny
+    }
+
     /// Czy w ogole mamy co robic. Sprawdzane w podsluchu, wiec musi byc tanie.
     static var wlaczone: Bool {
         Settings.wklejajCzystyTekst || Settings.wklejajPrzycinaj || Settings.wklejajBezDoczepek
@@ -72,7 +87,7 @@ enum Wklejanie {
     static func wykonaj(pomijanie: @escaping (Bool) -> Void) {
         let schowek = NSPasteboard.general
         guard let oryginal = schowek.string(forType: .string) else {
-            wyslijSkrot(pomijanie: pomijanie, przywroc: nil)
+            wyslijZPodmiana(pomijanie: pomijanie, przywroc: nil)
             return
         }
         let przerobiony = przerob(oryginal)
@@ -87,12 +102,12 @@ enum Wklejanie {
             schowek.clearContents()
             schowek.setString(przerobiony, forType: .string)
         }
-        wyslijSkrot(pomijanie: pomijanie, przywroc: trzebaZmienic ? przywroc : nil)
+        wyslijZPodmiana(pomijanie: pomijanie, przywroc: trzebaZmienic ? przywroc : nil)
     }
 
     /// Wyslanie ⌘V i - po chwili - oddanie schowka. Chwila jest potrzebna: program
     /// docelowy czyta schowek juz po tym, jak dostanie klawisze.
-    private static func wyslijSkrot(pomijanie: @escaping (Bool) -> Void,
+    private static func wyslijZPodmiana(pomijanie: @escaping (Bool) -> Void,
                                     przywroc: [(NSPasteboard.PasteboardType, Data)]?) {
         pomijanie(true)
         let v: CGKeyCode = 9
@@ -101,6 +116,8 @@ enum Wklejanie {
         let gora = CGEvent(keyboardEventSource: zrodlo, virtualKey: v, keyDown: false)
         dol?.flags = .maskCommand
         gora?.flags = .maskCommand
+        oznacz(dol)
+        oznacz(gora)
         dol?.post(tap: .cghidEventTap)
         gora?.post(tap: .cghidEventTap)
 

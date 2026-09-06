@@ -291,6 +291,11 @@ enum Wklejanie {
               let zwolnienie = CGEvent(keyboardEventSource: zrodlo, virtualKey: klawiszV, keyDown: false) else { return }
         wcisniecie.flags = .maskCommand
         zwolnienie.flags = .maskCommand
+        // Znak wlasny: to ⌘V wychodzi od nas, wiec podsluch ma je przepuscic
+        // bez przerabiania (inaczej wklejenie z historii kreciloby sie w kolko,
+        // gdy uzytkownik wlaczy przerabianie tresci pod ⌘V).
+        oznacz(wcisniecie)
+        oznacz(zwolnienie)
         wcisniecie.post(tap: .cghidEventTap)
         zwolnienie.post(tap: .cghidEventTap)
     }
