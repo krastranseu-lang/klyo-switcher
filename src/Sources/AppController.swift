@@ -61,10 +61,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// czego uchwycic: przelacznik Nagrywania ekranu wraca do wylaczonego, a czlowiek
     /// jest przekonany, ze program jest zepsuty. Nie da sie tego obejsc od srodka -
     /// mozna tylko stanac we wlasciwym miejscu.
-    private func zapytajOPrzeniesienie(wTranslokacji: Bool) -> Bool {
+    private func zapytajOPrzeniesienie(wTranslokacji: Bool, zObrazu: Bool = false) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Przenieść \(AppInfo.name) do katalogu Programy?"
-        alert.informativeText = wTranslokacji
+        alert.informativeText = zObrazu
+            ? """
+              Uruchomiłeś program prosto z pobranego obrazu. Obraz zniknie po odłączeniu,               a razem z nim program — dlatego zanim zaczniemy, przeniosę go do katalogu Programy.
+
+              Zajmie to sekundę: program uruchomi się ponownie z właściwego miejsca, a Ty nie               musisz nic przeciągać. Zgody systemowe będą się wtedy trzymać na stałe.
+              """
+            : wTranslokacji
             ? """
               macOS uruchomił ten program z katalogu tymczasowego, bo został pobrany z internetu               i nie stoi jeszcze w Programach. Ten katalog ma inną nazwę przy każdym uruchomieniu,               więc zgody systemowe — w tym Nagrywanie ekranu — nie mają się czego trzymać i wracają               do wyłączonych.
 
@@ -123,13 +129,25 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // stan posredni: czesc dziala, czesc nie, a przyczyny nie widac.
         let wTranslokacji = moja.contains("/AppTranslocation/")
 
-        guard numerowana || wTranslokacji else { return false }
+        // Program uruchomiony PROSTO Z OBRAZU (okno, w którym jest ikona i folder
+        // „Programy"). To najczęstsza droga: człowiek pobiera obraz, otwiera go
+        // i klika ikonę — bo po to ona tam jest. Przeciąganie zakłada, że wie,
+        // że musi je wykonać; kliknięcie ikony jest naturalniejsze i to my mamy
+        // sobie z nim poradzić, a nie liczyć, że ktoś przeczyta instrukcję.
+        //
+        // Obraz jest tylko do odczytu i zniknie po odmontowaniu, więc program
+        // uruchomiony stamtąd nie ma przyszłości: zgody nie mają się czego
+        // trzymać, autostart wskazuje na znikający wolumin, aktualizacja nie ma
+        // gdzie zapisać. Dlatego pytamy od razu.
+        let zObrazu = moja.hasPrefix("/Volumes/")
+
+        guard numerowana || wTranslokacji || zObrazu else { return false }
 
         // Pytamy, zamiast przenosic po cichu. Tak robi kazdy porzadny program na
         // Macu i tak trzeba: to jest ruch cudzego pliku po dysku uzytkownika,
         // a nie nasza wewnetrzna sprawa. Okno musi tez powiedziec DLACZEGO -
         // inaczej brzmi jak kaprys programu, a jest warunkiem dzialania zgod.
-        guard zapytajOPrzeniesienie(wTranslokacji: wTranslokacji) else { return false }
+        guard zapytajOPrzeniesienie(wTranslokacji: wTranslokacji, zObrazu: zObrazu) else { return false }
         return przeniesNaKanonicznaSciezke(pytaj: false)
     }
 
@@ -200,9 +218,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard wystartowala else { return false }
 
         // Kopia z numerem zrobila swoje - wyrzucamy ja, zeby nie zostawic kolejnej.
-        // Kopii w katalogu tymczasowym NIE ruszamy: nalezy do systemu, jest tylko
-        // do odczytu i zniknie sama.
-        if !wTranslokacji {
+        // NIE ruszamy kopii w katalogu tymczasowym ani na zamontowanym obrazie:
+        // naleza do systemu, sa tylko do odczytu i znikaja same.
+        if !wTranslokacji && !moja.hasPrefix("/Volumes/") {
             let doUsuniecia = moja
             DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
                 try? FileManager.default.trashItem(at: URL(fileURLWithPath: doUsuniecia), resultingItemURL: nil)
