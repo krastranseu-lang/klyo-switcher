@@ -67,6 +67,9 @@ enum SondaDzwieku {
             Thread.sleep(forTimeInterval: 0.2)
             najwyzszy = max(najwyzszy, GlosnoscAplikacji.szczyt(pid: pid))
         }
+        for wiersz in GlosnoscAplikacji.diagnoza(pid: pid) { print("   \(wiersz)") }
+        let ruch = GlosnoscAplikacji.ruch(pid: pid)
+        print("wywolan procedury IO: \(ruch.wywolania), buforow wejscia: \(ruch.bufory), bajtow: \(ruch.bajty)")
         print(String(format: "najglosniejsza probka w torze: %.4f", najwyzszy))
         print(najwyzszy > 0.0001
               ? "dzwiek PRZECHODZI przez mikser"

@@ -21,20 +21,23 @@ import CoreAudio
 // w ktory czlowiek klika. Tor bierze wiec cala rodzine procesow programu.
 
 final class TorDzwieku {
-    /// Klucze slownika urzadzenia zbiorczego - z `AudioHardware.h`.
+    /// Klucze slownika urzadzenia zbiorczego - BRANE Z SYSTEMU, nie przepisane.
     ///
-    /// Trzymane w jednym miejscu, bo to jedyne miejsce, w ktorym program zna te
-    /// napisy; rozsiane po kodzie rozjechalyby sie przy pierwszej literowce.
+    /// Pierwsza wersja miala je jako napisy z pamieci („master", „taps", …) i to
+    /// bylo zgadywanie: nagłowkow CoreAudio nie ma na tej maszynie, wiec nikt nie
+    /// mial jak sprawdzic, czy sa dobre. Stale systemowe sprawdza kompilator.
     private enum Klucz {
-        static let uid = "uid"
-        static let nazwa = "name"
-        static let podurzadzenia = "subdevices"
-        static let glowne = "master"
-        static let prywatne = "private"
-        static let ulozone = "stacked"
-        static let tapy = "taps"
-        static let tapAutoStart = "tapautostart"
-        static let dryf = "drift"
+        static let uid = kAudioSubDeviceUIDKey
+        static let tapUID = kAudioSubTapUIDKey
+        static let nazwa = kAudioAggregateDeviceNameKey
+        static let uidAgregatu = kAudioAggregateDeviceUIDKey
+        static let podurzadzenia = kAudioAggregateDeviceSubDeviceListKey
+        static let glowne = kAudioAggregateDeviceMainSubDeviceKey
+        static let prywatne = kAudioAggregateDeviceIsPrivateKey
+        static let ulozone = kAudioAggregateDeviceIsStackedKey
+        static let tapy = kAudioAggregateDeviceTapListKey
+        static let tapAutoStart = kAudioAggregateDeviceTapAutoStartKey
+        static let dryf = kAudioSubTapDriftCompensationKey
     }
 
     private(set) var pid: pid_t
@@ -51,6 +54,14 @@ final class TorDzwieku {
     private var procedura: AudioDeviceIOProcID?
     /// Najglosniejsza probka, jaka przeszla przez tor - dowod, ze cos tedy plynie.
     private(set) var szczyt: Float = 0
+    /// Kroki budowy z kodami bledow. Bez tego „nie dziala" nie mowi, CO nie dziala.
+    private(set) var diagnoza: [String] = []
+    /// Ile razy system zawolal procedure IO i ile bajtow przyszlo na wejsciu.
+    /// Zero wywolan i zero bajtow to dwie ROZNE usterki: pierwsze znaczy, ze
+    /// urzadzenie nie ruszylo, drugie - ze ruszylo, ale przechwycenie milczy.
+    private(set) var wywolania: Int = 0
+    private(set) var bajtyWejscia: Int = 0
+    private(set) var buforowWejscia: Int = 0
 
     init?(pid: pid_t, wzmocnienie: Float) {
         guard #available(macOS 14.2, *) else { return nil }
@@ -70,6 +81,7 @@ final class TorDzwieku {
     @available(macOS 14.2, *)
     private func zbuduj() -> Bool {
         let obiekty = Dzwiek.obiektyAudio(rodzinyProgramu: pid)
+        diagnoza.append("procesy audio programu: \(obiekty.count)")
         guard !obiekty.isEmpty else { return false }
 
         // 1. Przechwycenie z wyciszeniem oryginalu. Bez `.muted` slychac by bylo
@@ -79,39 +91,43 @@ final class TorDzwieku {
         opis.uuid = UUID()
         opis.isPrivate = true
         opis.muteBehavior = CATapMuteBehavior.mutedWhenTapped
-        guard AudioHardwareCreateProcessTap(opis, &tap) == noErr, tap != kAudioObjectUnknown else {
-            return false
-        }
+        let bladTapu = AudioHardwareCreateProcessTap(opis, &tap)
+        diagnoza.append("przechwycenie: blad=\(bladTapu) id=\(tap)")
+        guard bladTapu == noErr, tap != kAudioObjectUnknown else { return false }
         guard let tapUID = napis(obiekt: tap, selektor: kAudioTapPropertyUID),
               let wyjscie = TorDzwieku.urzadzenieWyjscia(),
               let wyjscieUID = napis(obiekt: wyjscie, selektor: kAudioDevicePropertyDeviceUID) else {
+            diagnoza.append("brak identyfikatora przechwycenia albo wyjscia")
             return false
         }
+        diagnoza.append("wyjscie: \(wyjscieUID)")
 
         // 2. Prywatne urzadzenie zbiorcze: z jednej strony nasze przechwycenie,
         //    z drugiej prawdziwe wyjscie. Prywatne znaczy, ze nie pojawi sie na
         //    liscie urzadzen w Ustawieniach - nikt go nie wybierze przez pomylke.
         let opisAgregatu: [String: Any] = [
             Klucz.nazwa: "Klyo Switcher — mikser",
-            Klucz.uid: "pl.klyo.switcher.mikser.\(pid).\(UUID().uuidString)",
+            Klucz.uidAgregatu: "pl.klyo.switcher.mikser.\(pid).\(UUID().uuidString)",
             Klucz.glowne: wyjscieUID,
             Klucz.prywatne: true,
             Klucz.ulozone: false,
             Klucz.tapAutoStart: true,
             Klucz.podurzadzenia: [[Klucz.uid: wyjscieUID]],
-            Klucz.tapy: [[Klucz.uid: tapUID, Klucz.dryf: true]]
+            Klucz.tapy: [[Klucz.tapUID: tapUID, Klucz.dryf: true]]
         ]
-        guard AudioHardwareCreateAggregateDevice(opisAgregatu as CFDictionary, &agregat) == noErr,
-              agregat != kAudioObjectUnknown else {
-            return false
-        }
+        let bladAgregatu = AudioHardwareCreateAggregateDevice(opisAgregatu as CFDictionary, &agregat)
+        diagnoza.append("urzadzenie zbiorcze: blad=\(bladAgregatu) id=\(agregat)")
+        guard bladAgregatu == noErr, agregat != kAudioObjectUnknown else { return false }
 
         // 3. Procedura IO: przepisuje probki z przechwycenia na wyjscie, mnozac
         //    je przez suwak. To jest cale „sciszanie jednego programu".
         let wskaznik = Unmanaged.passUnretained(self).toOpaque()
         let blad = AudioDeviceCreateIOProcID(agregat, TorDzwieku.przepisz, wskaznik, &procedura)
+        diagnoza.append("procedura IO: blad=\(blad)")
         guard blad == noErr, let procedura else { return false }
-        return AudioDeviceStart(agregat, procedura) == noErr
+        let bladStartu = AudioDeviceStart(agregat, procedura)
+        diagnoza.append("start: blad=\(bladStartu)")
+        return bladStartu == noErr
     }
 
     func rozbierz() {
@@ -146,6 +162,11 @@ final class TorDzwieku {
         let buforyWejscia = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: wejscie))
         let buforyWyjscia = UnsafeMutableAudioBufferListPointer(wyjscie)
         var szczyt: Float = 0
+        tor.wywolania += 1
+        tor.buforowWejscia = buforyWejscia.count
+        var bajtowNaWejsciu = 0
+        for numer in 0..<buforyWejscia.count { bajtowNaWejsciu += Int(buforyWejscia[numer].mDataByteSize) }
+        tor.bajtyWejscia = bajtowNaWejsciu
 
         for numer in 0..<buforyWyjscia.count {
             let cel = buforyWyjscia[numer]

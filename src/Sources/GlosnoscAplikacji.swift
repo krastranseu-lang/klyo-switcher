@@ -97,6 +97,16 @@ enum GlosnoscAplikacji {
     /// naprawde plynie przez nas, a nie obok nas. Interfejs rysuje z tego wskaznik.
     static func szczyt(pid: pid_t) -> Float { tory[pid]?.szczyt ?? 0 }
 
+    /// Kroki budowy toru z kodami bledow - dla sondy i dla nastepnego, ktory
+    /// bedzie sie zastanawial, dlaczego cos nie gra.
+    static func diagnoza(pid: pid_t) -> [String] { tory[pid]?.diagnoza ?? ["brak toru"] }
+
+    /// Ile przeszlo przez tor: wywolania procedury IO, bufory i bajty wejscia.
+    static func ruch(pid: pid_t) -> (wywolania: Int, bufory: Int, bajty: Int) {
+        guard let tor = tory[pid] else { return (0, 0, 0) }
+        return (tor.wywolania, tor.buforowWejscia, tor.bajtyWejscia)
+    }
+
     /// Zdejmuje WSZYSTKO. Wolane przy zamykaniu programu, zeby nie zostawic
     /// czyjegos dzwieku wyciszonego po naszym znikniciu.
     static func przywrocWszystkie() {
