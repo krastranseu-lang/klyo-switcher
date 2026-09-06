@@ -153,17 +153,22 @@ enum Permissions {
         //
         // Dlatego start zleca sie osobnemu poleceniu powloki, ktore przezyje nasze
         // zamkniecie: czeka, az proces zniknie, i dopiero wtedy otwiera program.
-        let sciezka = Bundle.main.bundlePath
-        let polecenie = """
+        // Sciezke przekazujemy jako ARGUMENT skryptu, nie wklejamy jej w tresc.
+        // Wklejanie wymagaloby cytowania, a kazdy blad w cytowaniu apostrofu albo
+        // spacji w nazwie katalogu konczy sie poleceniem, ktore robi cos innego,
+        // niz mysleliśmy. Argument jest odporny na wszystkie znaki.
+        let skrypt = """
         for i in 1 2 3 4 5 6 7 8 9 10; do
           /usr/bin/pgrep -x KlyoSwitcher >/dev/null 2>&1 || break
           sleep 1
         done
-        /usr/bin/open -n \(sciezka.shellEscaped())
+        /usr/bin/open -n "$1"
         """
         let proces = Process()
-        proces.executableURL = URL(fileURLWithPath: "/bin/bash")
-        proces.arguments = ["-c", "nohup /bin/bash -c \(polecenie.shellEscaped()) >/dev/null 2>&1 &"]
+        proces.executableURL = URL(fileURLWithPath: "/usr/bin/nohup")
+        proces.arguments = ["/bin/bash", "-c", skrypt, "klyo-restart", Bundle.main.bundlePath]
+        proces.standardOutput = FileHandle.nullDevice
+        proces.standardError = FileHandle.nullDevice
         try? proces.run()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
     }
