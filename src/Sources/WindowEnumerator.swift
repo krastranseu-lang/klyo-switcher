@@ -224,7 +224,12 @@ final class WindowEnumerator {
                         pid: pid,
                         windowID: identifier,
                         isMinimized: minimized,
-                        place: .here,
+                        // Biurko pytamy SYSTEMU, zamiast zakładać „to samo".
+                        // Accessibility oddaje okna ze wszystkich biurek —
+                        // sztywne `.here` kasowało tę wiedzę i program uznawał,
+                        // że nie ma dokąd przełączać.
+                        place: spaces.place(of: spaces.isAvailable ? Spaces.space(of: identifier) : nil,
+                                            onScreen: false),
                         target: .window(window),
                         thumbnail: nil,
                         bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
@@ -249,7 +254,12 @@ final class WindowEnumerator {
                         pid: pid,
                         windowID: 0,
                         isMinimized: minimized,
-                        place: .here,
+                        // Biurko pytamy SYSTEMU, zamiast zakładać „to samo".
+                        // Accessibility oddaje okna ze wszystkich biurek —
+                        // sztywne `.here` kasowało tę wiedzę i program uznawał,
+                        // że nie ma dokąd przełączać.
+                        place: spaces.place(of: spaces.isAvailable ? Spaces.space(of: identifier) : nil,
+                                            onScreen: false),
                         target: .window(window),
                         thumbnail: nil,
                         bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? ""
