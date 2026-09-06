@@ -224,3 +224,60 @@ enum WindowFocus {
         return true
     }
 }
+
+// MARK: - Ustawienie systemowe, od ktorego zalezy przelaczanie biurek
+
+/// macOS przelacza biurko przy aktywacji okna TYLKO wtedy, gdy czlowiek na to
+/// pozwolil w ustawieniu:
+///
+///   Ustawienia → Biurko i Dock → Mission Control →
+///   „Podczas przelaczania sie do programu przelacz na biurko z otwartymi oknami
+///    tego programu"
+///
+/// Gdy jest wylaczone, ZADEN przelacznik okien nie zmieni biurka - to decyzja
+/// systemu, nie programu. Program, ktory o tym milczy, wyglada na zepsuty:
+/// pokazuje okno z innego biurka, czlowiek je wybiera i nic sie nie dzieje.
+enum PrzelaczanieBiurek {
+    static let klucz = "AppleSpacesSwitchOnActivate"
+
+    /// Czy system ma pozwolenie na zmiane biurka. Brak wpisu znaczy „wlaczone" -
+    /// takie jest ustawienie domyslne macOS.
+    static var wlaczone: Bool {
+        guard let wartosc = UserDefaults.standard.object(forKey: klucz) else { return true }
+        return (wartosc as? Bool) ?? true
+    }
+
+    /// Wlacza ustawienie i przeladowuje Dock, zeby zaczelo obowiazywac od razu.
+    ///
+    /// Zmieniamy CUDZE ustawienie systemowe, wiec robimy to wylacznie na wyrazne
+    /// klikniecie czlowieka - nigdy sami przy starcie.
+    @discardableResult
+    static func wlacz() -> Bool {
+        UserDefaults.standard.set(true, forKey: klucz)
+        UserDefaults.standard.synchronize()
+
+        let zapis = Process()
+        zapis.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        zapis.arguments = ["write", "-g", klucz, "-bool", "true"]
+        zapis.standardOutput = FileHandle.nullDevice
+        zapis.standardError = FileHandle.nullDevice
+        guard (try? zapis.run()) != nil else { return false }
+        zapis.waitUntilExit()
+
+        // Bez przeladowania Docka ustawienie zaczyna dzialac dopiero po wylogowaniu.
+        let dock = Process()
+        dock.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+        dock.arguments = ["Dock"]
+        dock.standardOutput = FileHandle.nullDevice
+        dock.standardError = FileHandle.nullDevice
+        try? dock.run()
+        dock.waitUntilExit()
+        return zapis.terminationStatus == 0
+    }
+
+    /// Otwiera panel, w ktorym to ustawienie sie znajduje.
+    static func otworzUstawienia() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.dock") else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
