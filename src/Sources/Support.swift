@@ -104,6 +104,26 @@ enum Permissions {
     /// minus, potem plus i wskazac plik - czyli kilkanascie klikniec w miejscu,
     /// ktorego wiekszosc ludzi nie zna. `tccutil` robi dokladnie to samo jednym
     /// ruchem i nie wymaga hasla administratora, bo dotyczy wylacznie nas.
+    /// Usuwa systemowy wpis zgody na NAGRYWANIE EKRANU dla tego programu.
+    ///
+    /// To osobna sprawa niz Dostepnosc: macOS trzyma te zgody w osobnych rejestrach.
+    /// Wpis potrafi utknac w stanie „jest, ale nie dziala" - zwlaszcza gdy program
+    /// byl wczesniej uruchamiany z katalogu tymczasowego albo jako inna kopia.
+    /// Przelacznik daje sie wtedy przesuwac, ale nie zostaje wlaczony. Po usunieciu
+    /// wpisu system pyta od nowa i wiaze zgode z kopia, ktora naprawde dziala.
+    @discardableResult
+    static func naprawZgodeNagrywania() -> Bool {
+        guard let identyfikator = Bundle.main.bundleIdentifier else { return false }
+        let proces = Process()
+        proces.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        proces.arguments = ["reset", "ScreenCapture", identyfikator]
+        proces.standardOutput = FileHandle.nullDevice
+        proces.standardError = FileHandle.nullDevice
+        guard (try? proces.run()) != nil else { return false }
+        proces.waitUntilExit()
+        return proces.terminationStatus == 0
+    }
+
     @discardableResult
     static func naprawZgode() -> Bool {
         guard let identyfikator = Bundle.main.bundleIdentifier else { return false }
