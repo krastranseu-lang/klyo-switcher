@@ -41,6 +41,35 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Pytanie o przeniesienie do katalogu Programy.
+    ///
+    /// macOS uruchamia program pobrany z internetu z losowego katalogu tymczasowego
+    /// („AppTranslocation"), dopoki czlowiek nie przeniesie go do Programow. Sciezka
+    /// jest wtedy INNA przy kazdym uruchomieniu, wiec zgody systemowe nie maja sie
+    /// czego uchwycic: przelacznik Nagrywania ekranu wraca do wylaczonego, a czlowiek
+    /// jest przekonany, ze program jest zepsuty. Nie da sie tego obejsc od srodka -
+    /// mozna tylko stanac we wlasciwym miejscu.
+    private func zapytajOPrzeniesienie(wTranslokacji: Bool) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Przenieść \(AppInfo.name) do katalogu Programy?"
+        alert.informativeText = wTranslokacji
+            ? """
+              macOS uruchomił ten program z katalogu tymczasowego, bo został pobrany z internetu               i nie stoi jeszcze w Programach. Ten katalog ma inną nazwę przy każdym uruchomieniu,               więc zgody systemowe — w tym Nagrywanie ekranu — nie mają się czego trzymać i wracają               do wyłączonych.
+
+              Po przeniesieniu program uruchomi się ponownie z właściwego miejsca i zgody zaczną               działać na stałe.
+              """
+            : """
+              Ten program działa jako dodatkowa kopia. macOS przypisuje zgody konkretnej kopii,               więc zgoda włączona dla jednej nie działa dla drugiej — stąd „wszystko włączone,               a nic nie działa".
+
+              Po przeniesieniu zostanie jedna kopia we właściwym miejscu i jeden komplet zgód.
+              """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Przenieś i uruchom ponownie")
+        alert.addButton(withTitle: "Nie teraz")
+        if #available(macOS 14.0, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// Program ma DOKLADNIE JEDNO miejsce, w ktorym wolno mu istniec:
     /// `/Applications/Klyo Switcher.app` (albo ten sam katalog w folderze domowym,
     /// gdy konto nie ma prawa zapisu do systemowego).
@@ -71,7 +100,24 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let reszta = bezRozszerzenia.dropFirst(AppInfo.name.count + 1)
             return !reszta.isEmpty && reszta.allSatisfy { $0.isNumber }
         }()
-        guard numerowana else { return false }
+
+        // Program pobrany z internetu i uruchomiony BEZ przeniesienia do Programow
+        // macOS uruchamia z losowego katalogu tymczasowego („AppTranslocation").
+        // To zabezpieczenie Gatekeepera, ale dla nas oznacza katastrofe: sciezka
+        // jest INNA przy kazdym uruchomieniu, wiec zgody systemowe nie maja sie
+        // czego uchwycic. Zgoda Nagrywania ekranu w ogole sie wtedy nie utrwala -
+        // czlowiek przesuwa przelacznik, a ten wraca do wylaczonego. Dostepnosc
+        // czasem dziala, bo przyczepia sie do podpisu, i to najgorszy mozliwy
+        // stan posredni: czesc dziala, czesc nie, a przyczyny nie widac.
+        let wTranslokacji = moja.contains("/AppTranslocation/")
+
+        guard numerowana || wTranslokacji else { return false }
+
+        // Pytamy, zamiast przenosic po cichu. Tak robi kazdy porzadny program na
+        // Macu i tak trzeba: to jest ruch cudzego pliku po dysku uzytkownika,
+        // a nie nasza wewnetrzna sprawa. Okno musi tez powiedziec DLACZEGO -
+        // inaczej brzmi jak kaprys programu, a jest warunkiem dzialania zgod.
+        guard zapytajOPrzeniesienie(wTranslokacji: wTranslokacji) else { return false }
 
         var katalog = "/Applications"
         if !menedzer.isWritableFile(atPath: katalog) {
@@ -80,6 +126,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let cel = "\(katalog)/\(AppInfo.name).app"
         guard cel != moja else { return false }
+        // Z translokacji zawsze wychodzimy pod kanoniczna nazwa - katalog
+        // tymczasowy trzyma kopie o wlasciwej nazwie, wiec przenosimy ja tam,
+        // gdzie ma stac na stale.
 
         // Podmiana przez przestawienie nazw: nowa kopia wchodzi na miejsce starej
         // jednym ruchem. Gdyby cokolwiek zawiodlo, stara wraca i dalej dziala.
@@ -128,10 +177,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = grupa.wait(timeout: .now() + 12)
         guard wystartowala else { return false }
 
-        // Ta kopia zrobila swoje. Usuwamy ja, zeby nie zostawic szostej.
-        let doUsuniecia = moja
-        DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
-            try? FileManager.default.trashItem(at: URL(fileURLWithPath: doUsuniecia), resultingItemURL: nil)
+        // Kopia z numerem zrobila swoje - wyrzucamy ja, zeby nie zostawic kolejnej.
+        // Kopii w katalogu tymczasowym NIE ruszamy: nalezy do systemu, jest tylko
+        // do odczytu i zniknie sama.
+        if !wTranslokacji {
+            let doUsuniecia = moja
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1) {
+                try? FileManager.default.trashItem(at: URL(fileURLWithPath: doUsuniecia), resultingItemURL: nil)
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) }
         return true
