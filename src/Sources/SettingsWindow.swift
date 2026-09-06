@@ -153,6 +153,19 @@ final class SettingsStore: ObservableObject {
     @Published var screenshotMaxKB: Int = 1200 { didSet { commit { Settings.screenshotMaxKB = screenshotMaxKB } } }
     @Published var screenshotMaxPixels: Int = 2400 { didSet { commit { Settings.screenshotMaxPixels = screenshotMaxPixels } } }
     @Published var screenshotFormat: ScreenshotFormat = .jpeg { didSet { commit { Settings.screenshotFormat = screenshotFormat } } }
+
+    /// Czy system ma przełączać biurko przy przejściu do okna.
+    ///
+    /// To ustawienie należy do macOS (`AppleSpacesSwitchOnActivate`), nie do nas —
+    /// ale dla człowieka jest po prostu funkcją przełącznika okien i tu jest jego
+    /// miejsce. Zapis przeładowuje Dock, żeby zaczęło działać od razu, a nie po
+    /// wylogowaniu.
+    @Published var przelaczajBiurka: Bool = PrzelaczanieBiurek.wlaczone {
+        didSet {
+            guard oldValue != przelaczajBiurka else { return }
+            commit { PrzelaczanieBiurek.ustaw(przelaczajBiurka) }
+        }
+    }
     @Published var screenshotSaveToDisk: Bool = true { didSet { commit { Settings.screenshotSaveToDisk = screenshotSaveToDisk } } }
     @Published var screenshotFolder: String = ""
 
@@ -180,6 +193,7 @@ final class SettingsStore: ObservableObject {
         screenshotMaxKB = Settings.screenshotMaxKB
         screenshotMaxPixels = Settings.screenshotMaxPixels
         screenshotFormat = Settings.screenshotFormat
+        przelaczajBiurka = PrzelaczanieBiurek.wlaczone
         screenshotSaveToDisk = Settings.screenshotSaveToDisk
         screenshotFolder = Settings.screenshotFolder.path
         appShortcuts = Settings.appShortcuts
@@ -453,6 +467,20 @@ struct SettingsView: View {
                     Text(spacesExplanation)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider().padding(.vertical, 2)
+
+                    // To jest ustawienie SYSTEMU, ale człowiek nie ma powodu go
+                    // szukać w Ustawieniach macOS — dla niego to po prostu funkcja
+                    // przełącznika okien. Odsyłanie do cudzego panelu jest
+                    // przerzucaniem naszej roboty na użytkownika.
+                    Toggle("Przełączaj biurko przy wyborze okna", isOn: $store.przelaczajBiurka)
+                    Text(store.przelaczajBiurka
+                         ? "Wybór okna z innego biurka przenosi Cię na tamto biurko — tak samo jak kliknięcie ikony w Docku."
+                         : "Wyłączone: wybór okna z innego biurka NIE zmieni biurka. To ograniczenie systemu, nie programu — macOS pyta o tę zgodę raz i zapamiętuje ją dla wszystkich programów.")
+                        .font(.caption)
+                        .foregroundStyle(store.przelaczajBiurka ? .secondary : Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
