@@ -104,6 +104,37 @@ enum Permissions {
     /// minus, potem plus i wskazac plik - czyli kilkanascie klikniec w miejscu,
     /// ktorego wiekszosc ludzi nie zna. `tccutil` robi dokladnie to samo jednym
     /// ruchem i nie wymaga hasla administratora, bo dotyczy wylacznie nas.
+    /// Czy mamy zgode na sterowanie INNYM programem (Automatyzacja).
+    ///
+    /// Do tej pory wnioskowalismy o tym po tym, czy udalo sie pobrac karty
+    /// przegladarki - a to zupelnie co innego. Brak kart znaczy najczesciej
+    /// tyle, ze zadna przegladarka nie jest otwarta albo dziala tryb „tylko
+    /// okna". Program pokazywal wtedy „wylaczona" przy zgodzie, ktora czlowiek
+    /// mial WLACZONA w Ustawieniach - i slusznie sie zloscil.
+    ///
+    /// macOS ma na to osobne pytanie systemowe. `askUserIfNeeded: false` znaczy:
+    /// SPRAWDZ stan, ale nie wyswietlaj okna z pytaniem - inaczej samo otwarcie
+    /// listy zgod zasypywaloby czlowieka pytaniami o kazda przegladarke.
+    static func automatyzacjaNadana(dla identyfikator: String) -> Bool {
+        var cel = AEAddressDesc()
+        var bajty = Array(identyfikator.utf8)
+        let wynik = AECreateDesc(typeApplicationBundleID, &bajty, bajty.count, &cel)
+        guard wynik == noErr else { return false }
+        defer { AEDisposeDesc(&cel) }
+        return AEDeterminePermissionToAutomateTarget(&cel, typeWildCard, typeWildCard, false) == noErr
+    }
+
+    /// Czy zgoda na Automatyzacje jest nadana dla KTOREJKOLWIEK z przegladarek,
+    /// ktore program potrafi obsluzyc. Wystarczy jedna: to znaczy, ze czlowiek
+    /// przeszedl przez pytanie systemu i zgode wlaczyl.
+    static var automatyzacjaNadanaDlaJakiejsPrzegladarki: Bool {
+        let przegladarki = [
+            "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac",
+            "company.thebrowser.Browser", "org.mozilla.firefox", "com.brave.Browser",
+        ]
+        return przegladarki.contains { automatyzacjaNadana(dla: $0) }
+    }
+
     /// Usuwa systemowy wpis zgody na NAGRYWANIE EKRANU dla tego programu.
     ///
     /// To osobna sprawa niz Dostepnosc: macOS trzyma te zgody w osobnych rejestrach.
@@ -163,7 +194,18 @@ enum Permissions {
     /// Zgoda Nagrywania ekranu obowiazuje dopiero nowy proces - dzialajacy nadal
     /// nie ma dostepu, choc przelacznik w Ustawieniach jest wlaczony. Zamiast
     /// kazac czlowiekowi zamykac i otwierac program recznie, robimy to za niego.
+    /// Czy po ponownym uruchomieniu wrocic do okna zgod.
+    ///
+    /// Program restartuje sie po to, zeby zgoda zaczela obowiazywac - wiec zaraz
+    /// po starcie czlowiek chce zobaczyc, CZY ZADZIALALO. Bez tego znacznika
+    /// program wracal w milczeniu i trzeba bylo szukac okna w menu.
+    static var wrocDoOknaZgod: Bool {
+        get { UserDefaults.standard.bool(forKey: "wrocDoOknaZgod") }
+        set { UserDefaults.standard.set(newValue, forKey: "wrocDoOknaZgod") }
+    }
+
     static func uruchomPonownie() {
+        wrocDoOknaZgod = true
         // Nowa kopia programu musi wystartowac PO tym, jak ta sie zamknie.
         //
         // Proba uruchomienia drugiej kopii, gdy pierwsza jeszcze zyje, konczy sie
