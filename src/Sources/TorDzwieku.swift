@@ -144,7 +144,6 @@ final class TorDzwieku {
         let mnoznik = tor.wzmocnienieAtomowe
 
         let buforyWejscia = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: wejscie))
-        guard let wyjscie else { return noErr }
         let buforyWyjscia = UnsafeMutableAudioBufferListPointer(wyjscie)
         var szczyt: Float = 0
 
