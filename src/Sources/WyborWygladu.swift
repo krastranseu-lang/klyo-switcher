@@ -105,6 +105,69 @@ private struct RysunekWariantu: View {
     }
 }
 
+// MARK: - Jak dlugo trzymamy historie kopiowania
+//
+// Te sama zasada co wyzej: wybor obrazkiem. Kazdy wariant to slupek pokazujacy,
+// ile historii zostaje - od jednego dnia po „bez konca". Pytanie „jak dlugo
+// przechowuja sie skopiowane rzeczy" padlo wprost i az do 1.44.0 nie mialo
+// odpowiedzi, bo program pilnowal tylko LICZBY wpisow, nigdy ich wieku.
+
+struct WyborOkresuHistorii: View {
+    @Binding var dni: Int
+
+    private static let warianty: [(dni: Int, nazwa: String, slupki: Int)] = [
+        (1, "1 dzień", 1),
+        (7, "Tydzień", 2),
+        (30, "Miesiąc", 3),
+        (0, "Bez limitu", 4),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ForEach(Self.warianty, id: \.dni) { wariant in
+                    let wybrany = dni == wariant.dni
+                    Button {
+                        dni = wariant.dni
+                    } label: {
+                        VStack(spacing: 6) {
+                            HStack(alignment: .bottom, spacing: 3) {
+                                ForEach(0..<4, id: \.self) { numer in
+                                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                        .fill(numer < wariant.slupki
+                                              ? (wybrany ? Color.accentColor : Color.primary.opacity(0.45))
+                                              : Color.primary.opacity(0.12))
+                                        .frame(width: 6, height: 10 + CGFloat(numer) * 6)
+                                }
+                            }
+                            .frame(height: 30, alignment: .bottom)
+                            Text(wariant.nazwa)
+                                .font(.system(size: 11, weight: wybrany ? .semibold : .regular))
+                        }
+                        .frame(width: 74, height: 58)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.primary.opacity(0.05))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(wybrany ? Color.accentColor : Color.primary.opacity(0.12),
+                                              lineWidth: wybrany ? 2 : 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(dni == 0
+                 ? "Wpisy zostają, dopóki nie wypchną ich nowsze. Przypięte zostają zawsze."
+                 : "Wpisy starsze niż \(dni) dni znikają same. Przypięte zostają zawsze.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Trzy rysunki obok siebie - klikniecie wybiera wariant.
 struct WyborTrybuPodgladu: View {
     @Binding var wybor: TrybPodgladu

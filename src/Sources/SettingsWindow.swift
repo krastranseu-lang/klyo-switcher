@@ -149,6 +149,8 @@ final class SettingsStore: ObservableObject {
         }
     }
     @Published var limitHistorii: Int = 200 { didSet { commit { Settings.limitHistoriiSchowka = limitHistorii } } }
+    /// Po ilu dniach wpis znika sam. 0 = trzymamy bez konca.
+    @Published var dniHistorii: Int = 7 { didSet { commit { Settings.dniHistoriiSchowka = dniHistorii } } }
     @Published var skrotSchowka: KeyCombo = .unset { didSet { commit { Settings.skrotHistoriiSchowka = skrotSchowka } } }
     @Published var skrotCzysty: KeyCombo = .unset { didSet { commit { Settings.skrotCzystegoTekstu = skrotCzysty } } }
 
@@ -210,6 +212,7 @@ final class SettingsStore: ObservableObject {
         trybPodgladu = Settings.trybPodgladu
         historiaSchowka = Settings.historiaSchowkaWlaczona
         limitHistorii = Settings.limitHistoriiSchowka
+        dniHistorii = Settings.dniHistoriiSchowka
         skrotSchowka = Settings.skrotHistoriiSchowka
         skrotCzysty = Settings.skrotCzystegoTekstu
         wklejajCzysty = Settings.wklejajCzystyTekst
@@ -687,6 +690,7 @@ struct SettingsView: View {
                 }
 
                 section("Ile pamiętać") {
+                    WyborOkresuHistorii(dni: $store.dniHistorii)
                     Stepper(value: $store.limitHistorii, in: 20...1000, step: 20) {
                         Text("Najwyżej \(store.limitHistorii) wpisów")
                     }

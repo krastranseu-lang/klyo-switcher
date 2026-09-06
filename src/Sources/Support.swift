@@ -453,6 +453,7 @@ enum Settings {
         static let appShortcuts = "appShortcuts"
         static let historiaSchowka = "historiaSchowkaWlaczona"
         static let limitHistorii = "limitHistoriiSchowka"
+        static let dniHistorii = "dniHistoriiSchowka"
         static let skrotSchowka = "skrotHistoriiSchowka"
         static let skrotCzystegoTekstu = "skrotCzystegoTekstu"
         static let trybPodgladu = "trybPodgladuPodKursorem"
@@ -482,6 +483,7 @@ enum Settings {
             Key.autoCheckUpdates: true,
             Key.historiaSchowka: true,
             Key.limitHistorii: 200,
+            Key.dniHistorii: 7,
             Key.updateFeed: "https://klyo.pl/klyo-switcher/appcast.json"
         ])
     }
@@ -611,6 +613,16 @@ enum Settings {
     static var wklejajBezDoczepek: Bool {
         get { defaults.bool(forKey: Key.wklejajBezDoczepek) }
         set { defaults.set(newValue, forKey: Key.wklejajBezDoczepek) }
+    }
+
+    /// Po ilu dniach wpis znika z historii. `0` znaczy „trzymaj bez konca".
+    ///
+    /// Do 1.44.0 historia miala tylko limit ILOSCIOWY: wpis zyl, dopoki nie
+    /// wypchnely go nowsze. Skopiowane haslo sprzed miesiaca mogło wiec lezec
+    /// w programie w nieskonczonosc, a czlowiek nie mial jak tego ograniczyc.
+    static var dniHistoriiSchowka: Int {
+        get { max(0, defaults.integer(forKey: Key.dniHistorii)) }
+        set { defaults.set(max(0, newValue), forKey: Key.dniHistorii) }
     }
 
     static var limitHistoriiSchowka: Int {

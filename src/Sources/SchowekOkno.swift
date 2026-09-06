@@ -133,6 +133,21 @@ struct WidokSchowka: View {
         .onAppear { polePisania = true }
     }
 
+    /// Zebatka w pasku okna - stad ustawia sie, jak dlugo trzymamy historie
+    /// i czy w ogole ma dzialac. Szukanie tego w pasku menu bylo droga naokolo.
+    private var zebatkaUstawien: some View {
+        Button {
+            zamknij()
+            SettingsWindowController.shared.show(tab: .schowek)
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Ustawienia schowka")
+    }
+
     private var pasekSzukania: some View {
         HStack(spacing: 10) {
             Image(systemName: "doc.on.clipboard")
@@ -151,6 +166,7 @@ struct WidokSchowka: View {
                 }
                 .buttonStyle(.plain)
             }
+            zebatkaUstawien
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

@@ -156,9 +156,28 @@ final class HistoriaSchowka: ObservableObject {
         zapisz()
     }
 
+    /// Wpisy starsze niz ustawiona liczba dni znikaja same.
+    ///
+    /// Przypiete zostaja - czlowiek powiedzial wprost, ze maja zostac.
+    private func usunPrzeterminowane() {
+        let dni = Settings.dniHistoriiSchowka
+        guard dni > 0 else { return }
+        let granica = Date().addingTimeInterval(-Double(dni) * 24 * 60 * 60)
+        var zostaje: [WpisSchowka] = []
+        for wpis in wpisy {
+            if wpis.przypiety || wpis.czas >= granica {
+                zostaje.append(wpis)
+            } else if let plik = wpis.plik {
+                try? FileManager.default.removeItem(at: katalog.appendingPathComponent(plik))
+            }
+        }
+        wpisy = zostaje
+    }
+
     /// Historia nie moze rosnac bez konca. Przypiete wpisy zostaja zawsze -
     /// od tego sa przypiete.
     private func przytnij() {
+        usunPrzeterminowane()
         let limit = Settings.limitHistoriiSchowka
         guard wpisy.count > limit else { return }
         var zostaje: [WpisSchowka] = []

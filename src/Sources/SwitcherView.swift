@@ -63,10 +63,15 @@ final class SwitcherModel: ObservableObject {
             guard oldValue != hoveredID else { return }
             // Duzy podglad nalezy do POPRZEDNIEJ karty - gasimy go od razu, zeby
             // przez chwile nie pokazywac tresci innego okna niz to pod kursorem.
-            if duzyPodglad?.id != hoveredID { duzyPodglad = nil }
+            // Wyjatek: kursor wjechal NA PODGLAD. To dalej ten sam wybor, a bez
+            // wyjatku podglad gasl w chwili, gdy czlowiek szedl mysza do jego
+            // przyciskow - czyli dokladnie wtedy, gdy byl potrzebny.
+            if duzyPodglad?.id != hoveredID, !kursorNaPodgladzie { duzyPodglad = nil }
             onZmianaKursora?(hoveredID)
         }
     }
+    /// Kursor stoi nad panelem duzego podgladu (a nie nad karta).
+    @Published var kursorNaPodgladzie = false
     /// Ostry zrzut okna pod kursorem, robiony na zadanie - patrz `onZmianaKursora`.
     ///
     /// Miniatura na karcie ma 170 px szerokosci: widac po niej UKLAD okna, ale nie
@@ -323,6 +328,19 @@ struct SwitcherView: View {
                             .background(Capsule().fill(Color.accentColor.opacity(0.9)))
                             .foregroundStyle(Color.white)
                     }
+                    Spacer(minLength: 8)
+                    // Te same akcje, co na malej karcie. Bez nich powiekszenie
+                    // zabieralo mozliwosc kliknięcia w gwiazdke albo krzyzyk -
+                    // panel zaslanial karte, a swoich przyciskow nie mial.
+                    przyciskPodgladu("star", pozycja: pozycja, podpowiedz: "Ulubione (⌘D)") { index in
+                        model.onPrzypnij?(index)
+                    }
+                    przyciskPodgladu("xmark", pozycja: pozycja, podpowiedz: "Zamknij okno (⌘W)") { index in
+                        model.onClose?(index)
+                    }
+                    przyciskPodgladu("power", pozycja: pozycja, podpowiedz: "Zakończ program (⌘Q)") { index in
+                        model.onQuit?(index)
+                    }
                 }
             }
             .padding(14)
@@ -339,10 +357,36 @@ struct SwitcherView: View {
                     .strokeBorder(Barwy.obramowanie, lineWidth: 1.4)
             )
             .shadow(color: Color.black.opacity(0.45), radius: 30, y: 12)
-            .allowsHitTesting(false)
+            // Klikniecie w podglad przelacza na to okno - tak samo jak klikniecie
+            // w karte, tylko w cel, ktory widac duzy.
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .onTapGesture {
+                if let index = model.index(of: podglad.id) { model.onPick?(index) }
+            }
+            .onHover { wewnatrz in
+                model.kursorNaPodgladzie = wewnatrz
+                if wewnatrz { model.hoveredID = podglad.id }
+            }
             .transition(.opacity)
             .animation(.easeOut(duration: 0.12), value: podglad.id)
         }
+    }
+
+    /// Przycisk w pasku duzego podgladu - te same akcje, co na karcie.
+    private func przyciskPodgladu(_ symbol: String, pozycja: SwitcherItem,
+                                  podpowiedz: String,
+                                  akcja: @escaping (Int) -> Void) -> some View {
+        Button {
+            if let index = model.index(of: pozycja.id) { akcja(index) }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.white.opacity(0.16)))
+        }
+        .buttonStyle(.plain)
+        .help(podpowiedz)
     }
 
     // MARK: - Stopka
