@@ -365,6 +365,31 @@ struct SwitcherView: View {
 
     /// Kadr o stalych proporcjach - dzieki temu rzad kart wyglada jak rzad, a nie
     /// jak zbior obrazkow o przypadkowych wysokosciach. Zrzut okna jest dopasowany
+    /// Znak programu, do którego wracasz najczęściej.
+    ///
+    /// Trzy stopnie, trzy barwy — bursztyn, srebro, brąz — jak miejsca na podium.
+    /// Znak jest MAŁY i stoi w rogu, bo ma pomagać rozpoznać kartę kątem oka,
+    /// a nie odciągać uwagę od miniatury okna. Gwiazdka wielkości połowy karty
+    /// zakrzyczałaby to, po co człowiek tu patrzy.
+    ///
+    /// Ciemna obwódka pod spodem sprawia, że znak jest czytelny także na jasnej
+    /// miniaturze — bez niej gubi się na białym tle strony.
+    @ViewBuilder
+    private func gwiazdkaUlubionego(_ miejsce: Int) -> some View {
+        let barwa: Color = {
+            switch miejsce {
+            case 0: return Color(red: 1.00, green: 0.78, blue: 0.28)   // bursztyn
+            case 1: return Color(red: 0.83, green: 0.85, blue: 0.89)   // srebro
+            default: return Color(red: 0.80, green: 0.60, blue: 0.42)  // brąz
+            }
+        }()
+        Image(systemName: "star.fill")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(barwa)
+            .shadow(color: Color.black.opacity(0.55), radius: 1.5, x: 0, y: 0.5)
+            .help(miejsce == 0 ? "Najczęściej wybierany" : "Często wybierany")
+    }
+
     /// w calosci (bez ucinania), jak w podgladzie Windows i Mission Control.
     private func preview(for item: SwitcherItem, showsControls: Bool, isSelected: Bool) -> some View {
         let symbol = Settings.modifier.symbol
@@ -392,6 +417,12 @@ struct SwitcherView: View {
                     .frame(width: 20, height: 20)
                     .padding(4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+
+            if let miejsce = Ulubione.miejsce(programu: item.bundleID ?? "") {
+                gwiazdkaUlubionego(miejsce)
+                    .padding(5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
             if let label = item.place.label {
