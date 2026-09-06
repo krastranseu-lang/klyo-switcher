@@ -53,7 +53,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Pytanie o przeniesienie do katalogu Programy.
+    /// Pytanie o przeniesienie do katalogu Aplikacje.
     ///
     /// macOS uruchamia program pobrany z internetu z losowego katalogu tymczasowego
     /// („AppTranslocation"), dopoki czlowiek nie przeniesie go do Programow. Sciezka
@@ -63,16 +63,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// mozna tylko stanac we wlasciwym miejscu.
     private func zapytajOPrzeniesienie(wTranslokacji: Bool, zObrazu: Bool = false) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Przenieść \(AppInfo.name) do katalogu Programy?"
+        alert.messageText = "Przenieść \(AppInfo.name) do katalogu Aplikacje?"
         alert.informativeText = zObrazu
             ? """
-              Uruchomiłeś program prosto z pobranego obrazu. Obraz zniknie po odłączeniu,               a razem z nim program — dlatego zanim zaczniemy, przeniosę go do katalogu Programy.
+              Uruchomiłeś program prosto z pobranego obrazu. Obraz zniknie po odłączeniu,               a razem z nim program — dlatego zanim zaczniemy, przeniosę go do katalogu Aplikacje.
 
               Zajmie to sekundę: program uruchomi się ponownie z właściwego miejsca, a Ty nie               musisz nic przeciągać. Zgody systemowe będą się wtedy trzymać na stałe.
               """
             : wTranslokacji
             ? """
-              macOS uruchomił ten program z katalogu tymczasowego, bo został pobrany z internetu               i nie stoi jeszcze w Programach. Ten katalog ma inną nazwę przy każdym uruchomieniu,               więc zgody systemowe — w tym Nagrywanie ekranu — nie mają się czego trzymać i wracają               do wyłączonych.
+              macOS uruchomił ten program z katalogu tymczasowego, bo został pobrany z internetu               i nie stoi jeszcze w Aplikacjach. Ten katalog ma inną nazwę przy każdym uruchomieniu,               więc zgody systemowe — w tym Nagrywanie ekranu — nie mają się czego trzymać i wracają               do wyłączonych.
 
               Po przeniesieniu program uruchomi się ponownie z właściwego miejsca i zgody zaczną               działać na stałe.
               """
@@ -198,7 +198,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // znacznik `com.apple.quarantine` i jest otwierany przez system
         // (dokumentacja: „app translocation" wymaga tego znacznika; po jego
         // usunięciu nie zachodzi). Znacznik wędruje razem z kopiowanym plikiem,
-        // więc kopia w Programach też go miała — i przy uruchomieniu lądowała
+        // więc kopia w Aplikacjach też go miała — i przy uruchomieniu lądowała
         // w katalogu tymczasowym dokładnie tak samo jak oryginał. Człowiek widział
         // wtedy to samo pytanie o przeniesienie w kółko, choć program za każdym
         // razem uczciwie się kopiował.
@@ -301,7 +301,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Program pobrany z internetu laduje w katalogu Pobrane. Zostawiony tam dziala,
     /// ale znika przy sprzataniu katalogu, nie widzi go Launchpad, a autostart po
     /// zalogowaniu wskazuje na sciezke, ktorej moze juz nie byc. Dlatego przenosimy
-    /// sie sami do katalogu Programy - uzytkownik ma o jeden krok mniej.
+    /// sie sami do katalogu Aplikacje - uzytkownik ma o jeden krok mniej.
     ///
     /// Robimy to WYLACZNIE z Pobranych i z biurka, czyli z miejsc, gdzie plik ladue
     /// po pobraniu. Program uruchomiony swiadomie z innego katalogu zostawiamy w spokoju.
@@ -355,12 +355,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // Zamykamy sie DOPIERO wtedy, gdy nowa kopia naprawde dziala. Bezwarunkowe
         // zamkniecie po czasie zostawialo uzytkownika bez programu, gdy system
-        // nie zdazyl uruchomic kopii w Programach.
+        // nie zdazyl uruchomic kopii w Aplikacjach.
         potwierdzUruchomienie(cel: cel, prob: 6)
         return true
     }
 
-    /// Sprawdza, czy kopia w Programach naprawde ruszyla. Dopiero wtedy TA kopia
+    /// Sprawdza, czy kopia w Aplikacjach naprawde ruszyla. Dopiero wtedy TA kopia
     /// konczy prace. Gdy po kilku probach nic nie dziala, zostajemy uruchomieni -
     /// dzialajacy program w Pobranych jest lepszy niz zaden.
     private func potwierdzUruchomienie(cel: String, prob: Int) {
