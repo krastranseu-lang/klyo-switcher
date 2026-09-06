@@ -55,7 +55,7 @@ enum SondaDzwieku {
                 let wynik = GlosnoscKarty.ustaw(karta, poziom: procent / 100)
                 switch wynik {
                 case .ustawione(let ile):
-                    print("USTAWIONE \(Int(procent))% na „\(karta.tytul)" — elementów dźwiękowych: \(ile)")
+                    print("USTAWIONE \(Int(procent))% na: \(karta.tytul) — elementow dzwiekowych: \(ile)")
                 default:
                     print("NIE UDALO SIE: \(wynik.powod ?? "bez powodu")")
                 }
