@@ -337,6 +337,25 @@ enum WindowActivator {
         if wasMinimized {
             AXUIElementSetAttributeValue(window, AXKey.minimized as CFString, kCFBooleanFalse)
         }
+
+        // Czy okno stoi na INNYM biurku — musimy to wiedzieć PRZED przeskokiem.
+        //
+        // Po przeskoku „bieżące biurko" to już tamto, więc porównanie nic nie da.
+        // Ta wiedza rozstrzyga o dwóch rzeczach: czy wolno użyć zapasowej aktywacji
+        // aplikacji (nie wolno — potrafi wrócić na biurko, z którego wyszliśmy)
+        // i czy trzeba naprawić stan biurka źródłowego.
+        let mapa = SpaceMap.map()
+        let biurkoZrodlowe = mapa.current.first
+        let naInnymBiurku: Bool = {
+            guard mapa.isAvailable, biurkoZrodlowe != nil else { return false }
+            // Nieznane biurko traktujemy jak „to samo": lepiej użyć zapasowej
+            // ścieżki niż pominąć ją tam, gdzie była potrzebna.
+            guard let biurkoOkna = SpaceMap.space(of: windowID) else { return false }
+            return !mapa.current.contains(biurkoOkna)
+        }()
+        let programNaWierzchuZrodla = naInnymBiurku
+            ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
+
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.25)
         // Najpierw WindowServer (przelacza biurko i oddaje fokus), potem Accessibility,
@@ -345,6 +364,24 @@ enum WindowActivator {
         AXUIElementSetAttributeValue(window, AXKey.main as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(axApp, AXKey.focusedWindow as CFString, window)
         AXUIElementPerformAction(window, AXKey.raise as CFString)
+
+        if naInnymBiurku {
+            // ŻADNEJ zapasowej aktywacji aplikacji przy przeskoku na inne biurko.
+            //
+            // `NSRunningApplication.activate()` na macOS 14+ jest tylko prośbą,
+            // a przy oknie na innym biurku potrafi przywrócić biurko wyjściowe —
+            // czyli cofnąć to, co właśnie zrobiliśmy. Objaw jest dokładnie taki,
+            // jaki zgłosił użytkownik: lista pokazuje okno z innego biurka, wybór
+            // działa, ale biurko się nie zmienia.
+            if let zrodlo = biurkoZrodlowe, let poprzedni = programNaWierzchuZrodla, poprzedni != pid {
+                // Przeskok zapisał nas jako „program na wierzchu" także na biurku
+                // źródłowym. Przywracamy tam ten, który był — inaczej po powrocie
+                // wyskakuje nasze okno zamiast tamtego.
+                WindowFocus.przywrocPoprzednieBiurko(space: zrodlo, pid: poprzedni)
+            }
+            return
+        }
+
         if broughtByWindowServer {
             confirmFrontmost(pid: pid)
         } else {
