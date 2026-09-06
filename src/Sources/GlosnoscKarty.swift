@@ -70,6 +70,9 @@ enum GlosnoscKarty {
     /// listy zaraz po wyciszeniu i nie bylo czego kliknac, zeby wrocic - to jest
     /// dokladnie usterka „wylaczylem dzwiek i juz nie wraca".
     private static var poziomy: [String: Float] = [:]
+    /// Gdzie ta karta naprawde siedzi wedlug slownika przegladarki - raz znaleziona
+    /// para numerow zostaje, zeby suwak nie szukal jej od nowa przy kazdym ruchu.
+    private static var mapowanie: [String: (okno: Int, karta: Int)] = [:]
 
     /// Karta jest rozpoznawana po programie i tytule - jej element Dostepnosci
     /// zmienia sie przy kazdym przerysowaniu paska i nie nadaje sie na klucz.
@@ -106,76 +109,74 @@ enum GlosnoscKarty {
     @discardableResult
     static func ustaw(_ karta: KartaGrajaca, poziom: Float) -> WynikGlosnosciKarty {
         let docelowy = max(0, min(1, poziom))
-        guard let program = NSRunningApplication(processIdentifier: karta.pid),
-              let identyfikator = program.bundleIdentifier,
-              let rodzaj = BrowserSupport.definition(for: identyfikator)?.kind else {
-            return .nieObslugiwana
-        }
-        let skrypt = zbudujSkrypt(rodzaj: rodzaj, program: program.localizedName ?? "",
-                                  tytul: karta.tytul, poziom: docelowy)
-        let wynik = wykonaj(skrypt)
-        if case .ustawione = wynik {
+        // Numery okna i karty biora sie z Dostepnosci, a polecenie idzie
+        // slownikiem przegladarki - to dwie rozne numeracje i nie musza sie
+        // zgadzac. Dlatego skrypt SAM sprawdza, czy trafil we wlasciwa strone,
+        // i dopiero wtedy cokolwiek zmienia; inaczej suwak przy jednej karcie
+        // sciszalby inna.
+        if let zapamietane = mapowanie[klucz(karta)],
+           przypisz(karta, poziom: docelowy, okno: zapamietane.okno, karta: zapamietane.karta).mozliwe {
             poziomy[klucz(karta)] = docelowy
+            return .ustawione(elementow: 1)
         }
-        return wynik
+
+        var ostatni: WynikGlosnosciKarty = .nieObslugiwana
+        // Najpierw miejsce wskazane przez Dostepnosc, potem szukanie po kolei.
+        var proby: [(okno: Int, karta: Int)] = [(karta.numerOkna, karta.numerKarty)]
+        for okno in 1...2 {
+            for numer in 1...25 where !(okno == karta.numerOkna && numer == karta.numerKarty) {
+                proby.append((okno, numer))
+            }
+        }
+        var pustychPodRzad = 0
+        for proba in proby {
+            let wynik = przypisz(karta, poziom: docelowy, okno: proba.okno, karta: proba.karta)
+            switch wynik {
+            case .ustawione:
+                mapowanie[klucz(karta)] = proba
+                poziomy[klucz(karta)] = docelowy
+                return wynik
+            case .brakZgody, .javascriptWylaczony:
+                // To sa odmowy calej przegladarki - szukanie dalej nic nie da.
+                return wynik
+            case .brakOkien:
+                // Karty o takim numerze nie ma. Kilka pustych pod rzad znaczy,
+                // ze doszlismy do konca listy - dalsze pytanie to strata czasu.
+                pustychPodRzad += 1
+                ostatni = wynik
+                if pustychPodRzad > 6 { return wynik }
+            default:
+                pustychPodRzad = 0
+                ostatni = wynik
+            }
+        }
+        return ostatni
     }
 
-    private static func zbudujSkrypt(rodzaj: BrowserKind, program: String,
-                                     tytul: String, poziom: Float) -> String {
-        // Skrypt ustawia glosnosc KAZDEGO filmu i audio na stronie i zwraca ich
-        // liczbe. Zero znaczy, ze strona gra inaczej (np. Web Audio) - i wtedy
-        // uczciwa odpowiedzia jest „nie da sie", a nie udawanie, ze sie udalo.
+    /// Jedna proba: wykonaj skrypt w karcie o tych numerach.
+    private static func przypisz(_ karta: KartaGrajaca, poziom: Float,
+                                 okno: Int, karta numerKarty: Int) -> WynikGlosnosciKarty {
+        let rozpoznanie = String(karta.tytul.prefix(18))
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
         let js = """
-        (function(){var m=document.querySelectorAll('video,audio');var n=0;\
-        for(var i=0;i<m.length;i++){m[i].volume=\(poziom);m[i].muted=\(poziom == 0 ? "true" : "false");n++;}return n;})()
+        (function(){if(document.title.indexOf('\(rozpoznanie)')<0)return 'inna';        var m=document.querySelectorAll('video,audio');        for(var i=0;i<m.length;i++){m[i].volume=\(poziom);m[i].muted=\(poziom == 0 ? "true" : "false");}        return 'ok'+m.length;})()
         """
-        let jsCytowany = js.replacingOccurrences(of: "\"", with: "\\\"")
-        let tytulCytowany = tytul.replacingOccurrences(of: "\"", with: "\\\"")
-        switch rodzaj {
-        case .safari:
-            return """
-            tell application "\(program)"
-              repeat with w in windows
-                repeat with t in tabs of w
-                  if name of t contains "\(tytulCytowany)" then
-                    return (do JavaScript "\(jsCytowany)" in t)
-                  end if
-                end repeat
-              end repeat
-            end tell
-            return -1
-            """
-        case .chromium:
-            return """
-            tell application "\(program)"
-              repeat with w in windows
-                repeat with t in tabs of w
-                  if title of t contains "\(tytulCytowany)" then
-                    return (execute t javascript "\(jsCytowany)")
-                  end if
-                end repeat
-              end repeat
-            end tell
-            return -1
-            """
-        }
-    }
+        let odpowiedz = ZdarzeniaPrzegladarki.wykonajJavaScript(
+            js, pid: karta.pid, rodzaj: karta.rodzaj, numerOkna: okno, numerKarty: numerKarty)
 
-    private static func wykonaj(_ zrodlo: String) -> WynikGlosnosciKarty {
-        var blad: NSDictionary?
-        guard let skrypt = NSAppleScript(source: zrodlo) else { return .nieObslugiwana }
-        let odpowiedz = skrypt.executeAndReturnError(&blad)
-        if let blad {
-            let numer = (blad[NSAppleScript.errorNumber] as? Int) ?? 0
-            let opis = ((blad[NSAppleScript.errorMessage] as? String) ?? "").lowercased()
-            if numer == -1743 || numer == -1744 { return .brakZgody }
-            if opis.contains("javascript") { return .javascriptWylaczony }
-            if numer == -1719 { return .brakOkien }
-            return .nieObslugiwana
+        if odpowiedz.blad != 0 {
+            switch odpowiedz.blad {
+            case -1743, -1744: return .brakZgody
+            case 8, -2700: return .javascriptWylaczony
+            case -1728, -1719: return .brakOkien
+            default: return .nieObslugiwana
+            }
         }
-        let ile = Int(odpowiedz.int32Value)
-        if ile < 0 { return .brakOkien }
-        if ile == 0 { return .stronaNieOddajeGlosnosci }
-        return .ustawione(elementow: ile)
+        guard let tekst = odpowiedz.wynik else { return .nieObslugiwana }
+        if tekst == "inna" { return .brakOkien }
+        guard tekst.hasPrefix("ok") else { return .nieObslugiwana }
+        let ile = Int(tekst.dropFirst(2)) ?? 0
+        return ile > 0 ? .ustawione(elementow: ile) : .stronaNieOddajeGlosnosci
     }
 }

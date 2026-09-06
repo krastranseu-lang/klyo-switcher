@@ -156,21 +156,56 @@ final class ModelMiksera: ObservableObject {
     // MARK: Karty
 
     /// Poziom karty w skali 0…1 (100% = strona gra tak, jak ustawila sama).
-    func poziomKarty(_ karta: KartaGrajaca) -> Float { GlosnoscKarty.poziom(karta) }
+    func poziomKarty(_ karta: KartaGrajaca) -> Float {
+        obiecanePoziomy[GlosnoscKarty.klucz(karta)] ?? GlosnoscKarty.poziom(karta)
+    }
 
     /// Ostatni powod, dla ktorego suwak karty nie zadzialal - pokazywany przy
     /// tej karcie, zeby czlowiek wiedzial, czego brakuje, zamiast szarpac suwak.
     @Published private(set) var powodyKart: [String: String] = [:]
 
+    /// Ostatnia zadana wartosc suwaka karty - suwak ciagniety mysza wysyla
+    /// dziesiatki zmian na sekunde, a kazda z nich to rozmowa z przegladarka.
+    private var zadanePoziomyKart: [String: Float] = [:]
+    private var wysylkaTrwa: Set<String> = []
+
     func ustawPoziomKarty(_ karta: KartaGrajaca, _ nowy: Float) {
-        let wynik = GlosnoscKarty.ustaw(karta, poziom: nowy)
         let klucz = GlosnoscKarty.klucz(karta)
-        if let powod = wynik.powod {
-            powodyKart[klucz] = powod
-        } else {
-            powodyKart.removeValue(forKey: klucz)
+        zadanePoziomyKart[klucz] = nowy
+        // Suwak ma isc od razu, choc dzwiek dojdzie za chwile - inaczej wygladalby
+        // na zaciety.
+        obiecanePoziomy[klucz] = nowy
+        guard !wysylkaTrwa.contains(klucz) else { return }
+        wysylkaTrwa.insert(klucz)
+        wyslijPoziomKarty(karta, klucz: klucz)
+    }
+
+    /// Poziom pokazywany w oknie, zanim przegladarka potwierdzi.
+    @Published private(set) var obiecanePoziomy: [String: Float] = [:]
+
+    private func wyslijPoziomKarty(_ karta: KartaGrajaca, klucz: String) {
+        guard let wartosc = zadanePoziomyKart.removeValue(forKey: klucz) else {
+            wysylkaTrwa.remove(klucz)
+            return
         }
-        odswiez()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let wynik = GlosnoscKarty.ustaw(karta, poziom: wartosc)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let powod = wynik.powod {
+                    self.powodyKart[klucz] = powod
+                } else {
+                    self.powodyKart.removeValue(forKey: klucz)
+                }
+                // W czasie rozmowy z przegladarka czlowiek mogl ruszyc suwak dalej.
+                if self.zadanePoziomyKart[klucz] != nil {
+                    self.wyslijPoziomKarty(karta, klucz: klucz)
+                } else {
+                    self.wysylkaTrwa.remove(klucz)
+                    self.odswiez()
+                }
+            }
+        }
     }
 
     func powodKarty(_ karta: KartaGrajaca) -> String? { powodyKart[GlosnoscKarty.klucz(karta)] }

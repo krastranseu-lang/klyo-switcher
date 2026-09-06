@@ -33,6 +33,11 @@ struct KartaGrajaca: Identifiable {
     let program: String
     let element: AXUIElement
     let wyciszona: Bool
+    /// Numery liczone od 1 - tak, jak numeruje karty i okna sama przegladarka
+    /// w swoim slowniku polecen. Sluza do wskazania KTOREJ karty dotyczy suwak.
+    let numerOkna: Int
+    let numerKarty: Int
+    let rodzaj: BrowserKind
 }
 
 enum KartyDzwieku {
@@ -85,18 +90,19 @@ enum KartyDzwieku {
                   BrowserSupport.isSupported(identyfikator) else { continue }
             let pid = program.processIdentifier
             guard grajaceProgramy.contains(pid) else { continue }
-            wynik += karty(pid: pid, nazwaProgramu: program.localizedName ?? identyfikator)
+            guard let rodzaj = BrowserSupport.definition(for: identyfikator)?.kind else { continue }
+            wynik += karty(pid: pid, nazwaProgramu: program.localizedName ?? identyfikator, rodzaj: rodzaj)
         }
         return wynik
     }
 
-    private static func karty(pid: pid_t, nazwaProgramu: String) -> [KartaGrajaca] {
+    private static func karty(pid: pid_t, nazwaProgramu: String, rodzaj: BrowserKind) -> [KartaGrajaca] {
         let aplikacja = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(aplikacja, 0.4)
         let okna = elementy(aplikacja, kAXWindowsAttribute)
         var wynik: [KartaGrajaca] = []
         for (numer, okno) in okna.enumerated() {
-            for karta in paskiKart(okno) {
+            for (numerKarty, karta) in paskiKart(okno).enumerated() {
                 let opis = (wartosc(karta, kAXDescriptionAttribute) as? String)
                     ?? (wartosc(karta, kAXTitleAttribute) as? String) ?? ""
                 let male = opis.lowercased()
@@ -115,14 +121,21 @@ enum KartyDzwieku {
                 // zeby dzwiek wrocil. To jest usterka „wylaczylem i juz nie wraca".
                 let nasza = GlosnoscKarty.zapamietany(pid: pid, tytul: tytul)
                 guard gra || wyciszonaWgPrzegladarki || nasza else { continue }
+                // Ta sama strona bywa otwarta w dwoch oknach albo w dwoch kartach -
+                // na liscie ma stac RAZ, bo suwak i tak dotyczy jej wszystkich
+                // wystapien (rozpoznajemy karte po tytule).
+                if wynik.contains(where: { $0.tytul == tytul }) { continue }
                 wynik.append(KartaGrajaca(
-                    id: "karta:\(pid):\(numer):\(wynik.count):\(tytul.prefix(40))",
+                    id: "karta:\(pid):\(numer):\(numerKarty):\(tytul.prefix(40))",
                     tytul: tytul,
                     pid: pid,
                     program: nazwaProgramu,
                     element: karta,
                     wyciszona: wyciszonaWgPrzegladarki
-                        || GlosnoscKarty.poziom(pid: pid, tytul: tytul) <= 0.0001
+                        || GlosnoscKarty.poziom(pid: pid, tytul: tytul) <= 0.0001,
+                    numerOkna: numer + 1,
+                    numerKarty: numerKarty + 1,
+                    rodzaj: rodzaj
                 ))
             }
         }
@@ -192,18 +205,36 @@ enum KartyDzwieku {
         guard AXUIElementPerformAction(karta.element, "AXShowMenu" as CFString) == .success else {
             return false
         }
-        // Menu buduje sie chwile - bez tej przerwy nie ma czego szukac.
-        Thread.sleep(forTimeInterval: 0.25)
-        guard let pozycja = znajdzPozycjeWyciszenia(aplikacja) else {
+        // Menu buduje sie chwile, a otwarte BLOKUJE petle zdarzen przegladarki,
+        // wiec odpowiedzi z Dostepnosci przychodza wolniej niz zwykle. Pierwsza
+        // wersja czekala 0,25 s i nie znajdowala nic - menu zostawalo otwarte na
+        // ekranie, a dzwiek sie nie zmienial. Teraz probujemy kilka razy.
+        var pozycja: AXUIElement?
+        for _ in 0..<8 {
+            Thread.sleep(forTimeInterval: 0.12)
+            if let znaleziona = znajdzPozycjeWyciszenia(aplikacja) {
+                pozycja = znaleziona
+                break
+            }
+        }
+        guard let pozycja else {
             zamknijMenu()
             return false
         }
-        return AXUIElementPerformAction(pozycja, kAXPressAction as CFString) == .success
+        let udane = AXUIElementPerformAction(pozycja, kAXPressAction as CFString) == .success
+        // Menu ma zniknac tak czy inaczej - zostawione otwarte jest gorsze niz
+        // brak akcji, bo blokuje przegladarke pod reka czlowieka.
+        if !udane { zamknijMenu() }
+        return udane
     }
 
     private static func znajdzPozycjeWyciszenia(_ aplikacja: AXUIElement, glebokosc: Int = 0) -> AXUIElement? {
         guard glebokosc < 5 else { return nil }
         for dziecko in elementy(aplikacja, kAXChildrenAttribute) {
+            // Pasek menu programu nie jest tym, czego szukamy - tam „Wycisz"
+            // nie ma prawa byc, a schodzenie w niego kosztuje czas przy
+            // zablokowanej przegladarce.
+            if (wartosc(dziecko, kAXRoleAttribute) as? String) == kAXMenuBarRole { continue }
             if (wartosc(dziecko, kAXRoleAttribute) as? String) == kAXMenuRole {
                 for pozycja in elementy(dziecko, kAXChildrenAttribute) {
                     guard let tytul = (wartosc(pozycja, kAXTitleAttribute) as? String)?.lowercased() else { continue }
