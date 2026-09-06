@@ -627,3 +627,13 @@ struct VisualEffectBackground: NSViewRepresentable {
         nsView.state = .active
     }
 }
+
+
+extension Notification.Name {
+    /// Prosba o przeniesienie programu do katalogu Programy.
+    ///
+    /// Wysyla ja okno aktualizacji, gdy program stoi w katalogu tymczasowym:
+    /// aktualizacja nie ma tam gdzie zapisac, wiec zanim cokolwiek pobierzemy,
+    /// trzeba stanac we wlasciwym miejscu.
+    static let klyoPrzeniesDoProgramow = Notification.Name("klyo.przenies-do-programow")
+}
