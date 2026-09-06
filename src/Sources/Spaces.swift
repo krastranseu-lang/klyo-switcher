@@ -70,6 +70,21 @@ enum SkyLight {
         return unsafeBitCast(pointer, to: SpaceSetFrontPSN.self)
     }()
 
+    /// Skok WPROST na wskazane biurko - bez udawania Ctrl+strzalek.
+    ///
+    /// Zmierzone 6 wrzesnia 2026 na macOS 26.6: `SLSManagedDisplaySetCurrentSpace`
+    /// odpowiada zerem i biurko naprawde sie zmienia. To jedyna z prywatnych drog,
+    /// ktora na tym systemie jeszcze robi to, co obiecuje - `_SLPSSetFrontProcess`
+    /// zwraca zero i nie robi nic.
+    typealias SetCurrentSpace = @convention(c) (Int32, CFString, UInt64) -> Int32
+
+    static let setCurrentSpace: SetCurrentSpace? = {
+        guard let pointer = symbol(["SLSManagedDisplaySetCurrentSpace", "CGSManagedDisplaySetCurrentSpace"]) else {
+            return nil
+        }
+        return unsafeBitCast(pointer, to: SetCurrentSpace.self)
+    }()
+
     static let postEventRecordTo: PostEventRecordTo? = {
         guard let pointer = symbol(["SLPSPostEventRecordTo"]) else { return nil }
         return unsafeBitCast(pointer, to: PostEventRecordTo.self)
@@ -127,6 +142,9 @@ struct SpaceMap {
     let desktopNumbers: [SpaceID: Int]
     let fullscreen: Set<SpaceID>
     let isAvailable: Bool
+    /// Ekran, na ktorym stoi dane biurko. Potrzebny, zeby skoczyc na nie WPROST -
+    /// system pyta o biurko zawsze razem z ekranem, bo kazdy monitor ma wlasny zestaw.
+    var ekranBiurka: [SpaceID: String] = [:]
 
     static let unavailable = SpaceMap(current: [], desktopNumbers: [:], fullscreen: [], isAvailable: false)
 
@@ -156,6 +174,7 @@ enum Spaces {
         var current = Set<SpaceID>()
         var numbers: [SpaceID: Int] = [:]
         var fullscreen = Set<SpaceID>()
+        var ekrany: [SpaceID: String] = [:]
         var desktopCounter = 0
         // Monitory przychodza w kolejnosci Mission Control, wiec numeracja biurek
         // rosnie tak samo, jak widzi ja uzytkownik na gornym pasku Mission Control.
@@ -163,8 +182,10 @@ enum Spaces {
             if let active = display["Current Space"] as? [String: Any], let identifier = spaceID(active) {
                 current.insert(identifier)
             }
+            let ekran = display["Display Identifier"] as? String
             for space in display["Spaces"] as? [[String: Any]] ?? [] {
                 guard let identifier = spaceID(space) else { continue }
+                if let ekran { ekrany[identifier] = ekran }
                 let type = (space["type"] as? NSNumber)?.intValue ?? desktopType
                 if type == desktopType {
                     desktopCounter += 1
@@ -174,7 +195,8 @@ enum Spaces {
                 }
             }
         }
-        return SpaceMap(current: current, desktopNumbers: numbers, fullscreen: fullscreen, isAvailable: !current.isEmpty)
+        return SpaceMap(current: current, desktopNumbers: numbers, fullscreen: fullscreen,
+                        isAvailable: !current.isEmpty, ekranBiurka: ekrany)
     }
 
     private static func spaceID(_ dictionary: [String: Any]) -> SpaceID? {
@@ -195,6 +217,18 @@ enum Spaces {
 // MARK: - Fokus okna z przelaczeniem biurka
 
 enum WindowFocus {
+    /// Przejscie na wskazane biurko jednym wywolaniem. `false` znaczy, ze system
+    /// nie ma tej funkcji albo odmowil - wtedy zostaje droga przez skrot klawiszowy.
+    @discardableResult
+    static func skoczNaBiurko(_ biurko: SpaceID, mapa: SpaceMap) -> Bool {
+        guard let cid = SkyLight.connection,
+              let skok = SkyLight.setCurrentSpace,
+              let ekran = mapa.ekranBiurka[biurko] else { return false }
+        let wynik = skok(cid, ekran as CFString, biurko)
+        DziennikBiurek.zapisz("skok wprost na biurko \(biurko) (ekran \(ekran.prefix(8))): odpowiedz \(wynik)")
+        return wynik == 0
+    }
+
     /// Tryb "jak z reki uzytkownika" - WindowServer przelacza biurko tak samo,
     /// jak po kliknieciu okna w Docku albo w Mission Control.
     private static let userGenerated: UInt32 = 0x200

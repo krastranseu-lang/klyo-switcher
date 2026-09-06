@@ -456,6 +456,18 @@ enum WindowActivator {
             // tego samego skrótu, który macOS wykonuje przy geście trzema palcami —
             // system wykonuje zawsze, bo to zwykłe zdarzenie klawiatury.
             let biurkoCelu = biurkoOkna
+            // Droga pierwsza: skok WPROST na biurko celu, jednym wywolaniem.
+            // Nie udaje klawiatury, nie liczy krokow i nie zalezy od tego, czy
+            // uzytkownik ma wlaczone systemowe skroty przechodzenia miedzy biurkami.
+            if let cel = biurkoCelu, WindowFocus.skoczNaBiurko(cel, mapa: mapa) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    DziennikBiurek.zapisz("po skoku wprost: \(DziennikBiurek.stanBiurek())")
+                    podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+                    dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                       programNaWierzchuZrodla: programNaWierzchuZrodla)
+                }
+                return
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                 let poZmianie = Spaces.map()
                 DziennikBiurek.zapisz("po probie WindowServera: \(DziennikBiurek.stanBiurek())")
