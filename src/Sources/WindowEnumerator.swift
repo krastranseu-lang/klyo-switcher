@@ -74,6 +74,20 @@ final class WindowEnumerator {
         return -Double(usage)
     }
 
+    /// Tytul, ktory czlowiek moze przeczytac - albo nic.
+    ///
+    /// Niektore programy (edytory z wbudowana przegladarka) podaja jako tytul okna
+    /// wewnetrzny adres: `blob:file:///30903694-ab85-4034-...`. Na liscie wygladalo
+    /// to jak cztery identyczne karty z ciagiem znakow zamiast nazwy - gorzej niz
+    /// sama nazwa programu, bo nie da sie ich od siebie odroznic.
+    private func czytelnyTytul(_ tytul: String) -> String {
+        let przyciety = tytul.trimmingCharacters(in: .whitespacesAndNewlines)
+        for przedrostek in ["blob:", "data:", "about:blank", "chrome-extension://", "devtools://"] {
+            if przyciety.hasPrefix(przedrostek) { return "" }
+        }
+        return przyciety
+    }
+
     private func axWindows(of axApp: AXUIElement, pid: pid_t) -> [AXUIElement]? {
         let started = CFAbsoluteTimeGetCurrent()
         if let pausedUntil = axPausedUntil[pid], pausedUntil > started { return nil }
@@ -174,7 +188,7 @@ final class WindowEnumerator {
                 used.insert(record.windowID)
                 let axWindow = axByID[record.windowID]
                 let axTitle = axWindow.flatMap { axString($0, AXKey.title) } ?? ""
-                let rawTitle = !axTitle.isEmpty ? axTitle : record.title
+                let rawTitle = czytelnyTytul(!axTitle.isEmpty ? axTitle : record.title)
                 if rawTitle.isEmpty, axWindow == nil, titlesAvailable { continue }
                 let title = rawTitle.isEmpty ? appName : rawTitle
                 if !rawTitle.isEmpty { seenTitles.insert(rawTitle) }
