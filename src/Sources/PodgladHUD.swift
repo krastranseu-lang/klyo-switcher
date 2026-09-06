@@ -62,6 +62,15 @@ enum PodgladHUD {
         }
         // Druga pozycja - dokladnie to, co widac po jednym ⌘⇥, czyli najczestszy widok.
         model.selection = min(1, okna.count - 1)
+        // `--najazd N` udaje kursor stojacy nad N-ta karta. Powiekszenia pod myszą
+        // nie da sie inaczej obejrzec: zyje tylko w czasie, gdy ktos trzyma ⌘
+        // i rusza mysza, a zrzut ekranu wymaga zgody, ktorej narzedzia nie maja.
+        if let miejsce = CommandLine.arguments.firstIndex(of: "--najazd"),
+           miejsce + 1 < CommandLine.arguments.count,
+           let numer = Int(CommandLine.arguments[miejsce + 1]),
+           okna.indices.contains(numer) {
+            model.hoveredID = okna[numer].id
+        }
 
         let rozmiar = HUDLayout.panelSize(count: okna.count, columns: kolumny)
         let okno = NSWindow(
