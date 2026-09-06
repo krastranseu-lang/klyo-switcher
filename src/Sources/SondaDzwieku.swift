@@ -61,11 +61,6 @@ enum SondaDzwieku {
                 if argumenty.contains("--przygotuj") {
                     print("przygotowanie: \(GlosnoscKarty.przygotuj(pid: karta.pid))")
                 }
-                if argumenty.contains("--wlacz-js") {
-                    let przed = PrzelacznikJS.stan(pid: karta.pid)
-                    let po = PrzelacznikJS.wlacz(pid: karta.pid)
-                    print("przelacznik JavaScript: \(przed) -> \(po ? "wlaczony" : "nadal wylaczony")")
-                }
                 let wynik = GlosnoscKarty.ustaw(karta, poziom: procent / 100)
                 switch wynik {
                 case .ustawione(let ile):
