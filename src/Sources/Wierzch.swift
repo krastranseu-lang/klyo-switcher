@@ -12,11 +12,17 @@ import ApplicationServices
 // pokazywala, znikala po puszczeniu ⌘ i okno zostawalo to samo. Najczestszy ruch -
 // jedno ⌘⇥ na poprzednie okno - nie dzialal ANI RAZU w piatce prob.
 //
-// Droga, ktora dziala (sprawdzona na tej samej maszynie, 4 przypadki na 4, w tym
-// przelaczenie miedzy dwoma oknami TEGO SAMEGO programu):
-//   1. `AXFrontmost = true` na aplikacji - to jest ta czesc, ktorej brakowalo,
-//   2. chwila przerwy (system wystawia aplikacje na wierzch swoim tempem),
-//   3. `AXMain`, `AXFocusedWindow` i `AXRaise` na wybranym oknie.
+// Droga, ktora dziala (sprawdzona na tej samej maszynie, w tym przelaczenie
+// miedzy dwoma oknami TEGO SAMEGO programu):
+//   1. `AXMain`, `AXMainWindow`, `AXFocusedWindow` i `AXRaise` - mowimy programowi,
+//      ktore okno jest teraz glowne,
+//   2. chwila przerwy,
+//   3. SYSTEMOWA aktywacja programu (`NSRunningApplication.activate` po ustapieniu
+//      aktywacji). W tej kolejnosci macOS wynosi tylko okno glowne - dokladnie jak
+//      przy kliknieciu ikony w Docku.
+//
+// Odwrotna kolejnosc (`AXFrontmost` najpierw) wynosila WSZYSTKIE okna programu -
+// przy dwoch oknach VS Code na wierzch wychodzily oba, choc czlowiek wybral jedno.
 //
 // Niezmiennik: **wynik sprawdzamy, a nie zakladamy**. Kazde przelaczenie konczy
 // pytaniem do systemu, ktore okno jest teraz na wierzchu. Zalozenie, ze „skoro
@@ -57,10 +63,24 @@ enum Wierzch {
     static func podnies(window: AXUIElement, windowID: CGWindowID, pid: pid_t, dopilnuj: Bool = true) {
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        AXUIElementSetAttributeValue(axApp, AXKey.frontmost as CFString, kCFBooleanTrue)
+
+        // KOLEJNOSC MA ZNACZENIE i to ona byla usterka „wychodza oba okna".
+        //
+        // `AXFrontmost = true` wystawia CALY PROGRAM, a macOS wynosi wtedy wszystkie
+        // jego okna nad okna cudze. Przy dwoch oknach VS Code na wierzch szly oba,
+        // choc czlowiek wybral jedno. Zmierzone 6 wrzesnia 2026 (macOS 26.6): trzy
+        // warianty z `AXFrontmost` - zawsze oba okna.
+        //
+        // Kliknieciu w Docku to sie nie zdarza, bo system wynosi wtedy okno GLOWNE
+        // programu. Wystarczy wiec najpierw powiedziec programowi, ktore okno jest
+        // glowne (AXMain / AXMainWindow / AXFocusedWindow + AXRaise), a DOPIERO
+        // POTEM aktywowac program droga systemowa. Zmierzone dwa razy z rzedu, raz
+        // dla kazdego z dwoch okien Code: na wierzchu ladowalo tylko wybrane,
+        // drugie zostawalo pod oknem innego programu.
+        wskazOkno(axApp: axApp, window: window)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPoAktywacji) {
-            wskazOkno(axApp: axApp, window: window)
+            WindowActivator.activateApp(pid: pid)
             guard dopilnuj else { return }
             sprawdzWynik(window: window, windowID: windowID, pid: pid, proba: 1)
         }
@@ -76,6 +96,8 @@ enum Wierzch {
     static func podniesProces(windowID: CGWindowID, pid: pid_t) {
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
+        // Bez uchwytu do okna nie ma czego wskazac jako glowne - zostaje wystawienie
+        // programu. Gdy uchwyt sie pojawi (nizej), idziemy juz droga „wskaz i aktywuj".
         AXUIElementSetAttributeValue(axApp, AXKey.frontmost as CFString, kCFBooleanTrue)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + przerwaPoAktywacji) {
@@ -143,8 +165,8 @@ enum Wierzch {
                     """)
                 let axApp = AXUIElementCreateApplication(pid)
                 AXUIElementSetMessagingTimeout(axApp, 0.35)
-                AXUIElementSetAttributeValue(axApp, AXKey.frontmost as CFString, kCFBooleanTrue)
                 wskazOkno(axApp: axApp, window: window)
+                WindowActivator.activateApp(pid: pid)
                 sprawdzWynik(window: window, windowID: windowID, pid: pid, proba: 2)
             case 2:
                 DziennikBiurek.zapisz("przelaczenie na okno \(windowID): druga proba nie wyszla - droga systemowa")
