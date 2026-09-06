@@ -1,115 +1,127 @@
 import AppKit
 import CoreAudio
 
-// MARK: - Wyciszanie POJEDYNCZEJ aplikacji i glosnosc systemu
+// MARK: - Glosnosc POJEDYNCZEGO programu (i calego systemu)
 //
-// Do macOS 14.1 wlacznie nie bylo na to publicznej drogi - narzedzia typu
-// SoundSource instaluja wlasny sterownik dzwieku do katalogu systemowego.
-// Od 14.2 Apple dodalo „przechwycenie procesu" (`AudioHardwareCreateProcessTap`
-// z `CATapDescription`), a opis tapu ma pole `muteBehavior`. Utworzenie
-// PRYWATNEGO tapu z wyciszeniem wycisza wskazany proces i nic wiecej.
+// Zadanie brzmialo: „jak w Windows i Android" - suwak przy kazdej aplikacji
+// osobno, a nie glosnosc calego komputera. macOS nie ma na to API i nigdy nie
+// mial; jest za to droga okrezna, ktora daje dokladnie ten sam wynik: przejac
+// dzwiek programu, wyciszyc oryginal, przemnozyc probki i wypuscic je z
+// powrotem. Cala ta robota siedzi w `TorDzwieku`; tutaj jest tylko ksiegowosc:
+// ktory program ma jaki poziom i kiedy tor jest w ogole potrzebny.
 //
-// Zmierzone 6 wrzesnia 2026 na macOS 26.6, zanim powstal ten plik:
-//     pid 65391 -> obiekt audio 125 (blad 0)
-//     AudioHardwareCreateProcessTap: 0 OK, tapID = 127
-// Pierwsze podejscie zwrocilo `!obj`, bo opis tapu oczekuje IDENTYFIKATOROW
-// OBIEKTOW AUDIO, a nie pidow - stad tlumaczenie przez `id2p`. Swift bierze je
-// jako zwykle `AudioObjectID`, nie jako `NSNumber` - opakowanie nie kompiluje sie.
+// Niezmiennik: tor istnieje TYLKO wtedy, gdy cos zmienia. Przy 100 procentach
+// dzwiek idzie systemem tak jak zawsze - nie stoimy w drodze niczemu, czego nie
+// prosil nas nikt, zeby zmieniac.
 //
-// Niezmiennik: kazde wyciszenie da sie cofnac. Tapy trzymamy w slowniku i
-// niszczymy przy przywroceniu oraz przy zamykaniu programu - inaczej czyjs
-// dzwiek zostalby wyciszony na zawsze, a czlowiek nie mialby jak tego odkrecic.
+// Dwie rzeczy, ktore ten plik naprawil po zgloszeniu „wyciszylem, a nadal gra":
+//   1. wyciszany byl pid programu, a dzwiek wysyla proces POMOCNICZY - teraz
+//      idzie do przechwycenia cala rodzina procesow (patrz `Dzwiek.rodzina`),
+//   2. samo przechwycenie z wyciszeniem nie odtwarzalo niczego z powrotem, wiec
+//      przy poziomie innym niz zero nie mialo jak zagrac ciszej.
 
 enum GlosnoscAplikacji {
-    private static var tapy: [pid_t: AudioObjectID] = [:]
+    private static var tory: [pid_t: TorDzwieku] = [:]
+    /// Poziom sprzed wyciszenia - zeby glosnik przywracal to, co bylo, a nie 100%.
+    private static var poziomPrzedWyciszeniem: [pid_t: Float] = [:]
 
-    static var wyciszone: Set<pid_t> { Set(tapy.keys) }
+    static var wyciszone: Set<pid_t> {
+        Set(tory.filter { $0.value.wzmocnienie <= 0.0001 }.keys)
+    }
 
-    /// Czy ten system w ogole umie wyciszyc pojedynczy program.
+    /// Programy, ktorym cokolwiek zmieniamy - takze te tylko przyciszone.
+    static var zmienione: Set<pid_t> { Set(tory.keys) }
+
+    /// Czy ten system w ogole umie regulowac glosnosc jednego programu.
     ///
-    /// Przechwycenie procesu istnieje od macOS 14.2. Na starszych glosnik na
-    /// karcie zostaje ZNAKIEM (widac, co gra), ale nie udaje przycisku - lepiej
-    /// nie dac funkcji, niz dac taka, ktora nic nie robi.
+    /// Przechwycenie procesu istnieje od macOS 14.2. Na starszych zostaje sam
+    /// znak „ten program gra" - lepiej nie dac funkcji, niz dac taka, ktora
+    /// wyglada na dzialajaca i nic nie robi.
     static var dostepne: Bool {
         if #available(macOS 14.2, *) { return true }
         return false
     }
 
-    static func czyWyciszony(pid: pid_t) -> Bool { tapy[pid] != nil }
+    static func czyWyciszony(pid: pid_t) -> Bool {
+        guard let tor = tory[pid] else { return false }
+        return tor.wzmocnienie <= 0.0001
+    }
 
-    /// Wycisza program albo przywraca mu dzwiek. Zwraca stan PO zmianie.
+    /// Poziom programu: 1.0 = bez zmiany, 0.0 = cisza, 2.0 = dwa razy glosniej.
+    static func poziom(pid: pid_t) -> Float {
+        tory[pid]?.wzmocnienie ?? 1.0
+    }
+
+    /// Ustawia poziom i zwraca to, co udalo sie osiagnac.
+    ///
+    /// Zwrocona wartosc bywa inna niz zadana dokladnie w jednym przypadku: gdy
+    /// nie da sie zbudowac toru (program nie ma jeszcze procesu dzwieku albo
+    /// system jest starszy niz 14.2). Wtedy odpowiedzia jest 1.0 - i interfejs
+    /// pokaze prawde zamiast suwaka, ktory tylko udaje.
+    @discardableResult
+    static func ustawPoziom(pid: pid_t, _ nowy: Float) -> Float {
+        let docelowy = max(0, min(2.0, nowy))
+
+        // Powrot do 100 procent = rozebranie toru. Nie zostawiamy przechwycenia,
+        // ktore nic nie zmienia, a kosztuje program przejscie przez nasz kod.
+        if abs(docelowy - 1.0) < 0.0001 {
+            tory.removeValue(forKey: pid)?.rozbierz()
+            poziomPrzedWyciszeniem.removeValue(forKey: pid)
+            return 1.0
+        }
+
+        guard dostepne else { return 1.0 }
+
+        if let tor = tory[pid] {
+            tor.wzmocnienie = docelowy
+            return docelowy
+        }
+        guard let tor = TorDzwieku(pid: pid, wzmocnienie: docelowy) else { return 1.0 }
+        tory[pid] = tor
+        return docelowy
+    }
+
+    /// Wycisza program albo przywraca mu poprzedni poziom. Zwraca stan PO zmianie.
     @discardableResult
     static func przelaczWyciszenie(pid: pid_t) -> Bool {
-        guard #available(macOS 14.2, *) else { return false }
-        if let tap = tapy.removeValue(forKey: pid) {
-            AudioHardwareDestroyProcessTap(tap)
+        if czyWyciszony(pid: pid) {
+            let poprzedni = poziomPrzedWyciszeniem.removeValue(forKey: pid) ?? 1.0
+            ustawPoziom(pid: pid, poprzedni)
             return false
         }
-        guard let obiekt = obiektProcesu(pid: pid) else { return false }
-        let opis = CATapDescription(stereoMixdownOfProcesses: [obiekt])
-        opis.name = "Klyo Switcher — wyciszenie"
-        opis.uuid = UUID()
-        opis.isPrivate = true
-        opis.muteBehavior = CATapMuteBehavior.muted
-        var tap = AudioObjectID(kAudioObjectUnknown)
-        guard AudioHardwareCreateProcessTap(opis, &tap) == noErr, tap != kAudioObjectUnknown else {
-            return false
-        }
-        tapy[pid] = tap
-        return true
+        poziomPrzedWyciszeniem[pid] = poziom(pid: pid)
+        return ustawPoziom(pid: pid, 0) <= 0.0001
     }
 
-    /// Zdejmuje WSZYSTKIE wyciszenia. Wolane przy zamykaniu programu, zeby
-    /// nie zostawic czyjegos dzwieku wyciszonego po naszym zniknieciu.
+    /// Najglosniejsza probka, jaka przeszla przez tor - zywy dowod, ze dzwiek
+    /// naprawde plynie przez nas, a nie obok nas. Interfejs rysuje z tego wskaznik.
+    static func szczyt(pid: pid_t) -> Float { tory[pid]?.szczyt ?? 0 }
+
+    /// Zdejmuje WSZYSTKO. Wolane przy zamykaniu programu, zeby nie zostawic
+    /// czyjegos dzwieku wyciszonego po naszym znikniciu.
     static func przywrocWszystkie() {
-        guard #available(macOS 14.2, *) else { tapy.removeAll(); return }
-        for (_, tap) in tapy { AudioHardwareDestroyProcessTap(tap) }
-        tapy.removeAll()
+        for (_, tor) in tory { tor.rozbierz() }
+        tory.removeAll()
+        poziomPrzedWyciszeniem.removeAll()
     }
 
-    /// Program, ktory zniknal, nie musi juz byc wyciszany - a jego tap zajmuje
-    /// miejsce w serwerze dzwieku.
+    /// Program, ktory zniknal, nie potrzebuje juz toru - a tor zajmuje miejsce
+    /// w serwerze dzwieku.
     static func posprzatajPoZamknietych() {
-        guard #available(macOS 14.2, *) else { return }
-        for (pid, tap) in tapy where NSRunningApplication(processIdentifier: pid) == nil {
-            AudioHardwareDestroyProcessTap(tap)
-            tapy.removeValue(forKey: pid)
+        for (pid, tor) in tory where NSRunningApplication(processIdentifier: pid) == nil {
+            tor.rozbierz()
+            tory.removeValue(forKey: pid)
+            poziomPrzedWyciszeniem.removeValue(forKey: pid)
         }
-    }
-
-    private static func obiektProcesu(pid: pid_t) -> AudioObjectID? {
-        var adres = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var wejscie = pid
-        var wynik = AudioObjectID(kAudioObjectUnknown)
-        var rozmiar = UInt32(MemoryLayout<AudioObjectID>.size)
-        let blad = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &adres,
-                                              UInt32(MemoryLayout<pid_t>.size), &wejscie,
-                                              &rozmiar, &wynik)
-        guard blad == noErr, wynik != kAudioObjectUnknown else { return nil }
-        return wynik
     }
 
     // MARK: - Glosnosc calego systemu
     //
-    // Osobna sprawa niz wyciszanie pojedynczego programu, ale mieszka tu, bo
-    // czlowiek widzi to jako jedno: „chce to sciszyc".
+    // Osobna sprawa niz poziom jednego programu, ale mieszka tu, bo czlowiek
+    // widzi to jako jedno: „chce to sciszyc".
 
     private static func urzadzenieWyjscia() -> AudioObjectID? {
-        var adres = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var urzadzenie = AudioObjectID(kAudioObjectUnknown)
-        var rozmiar = UInt32(MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &adres,
-                                         0, nil, &rozmiar, &urzadzenie) == noErr,
-              urzadzenie != kAudioObjectUnknown else { return nil }
-        return urzadzenie
+        TorDzwieku.urzadzenieWyjscia()
     }
 
     /// Adres glosnosci urzadzenia.

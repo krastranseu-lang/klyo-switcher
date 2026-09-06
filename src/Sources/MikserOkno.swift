@@ -24,6 +24,8 @@ final class ModelMiksera: ObservableObject {
         let ikona: NSImage?
         let gra: Bool
         let wyciszony: Bool
+        /// 1.0 = bez zmiany. Suwak pokazuje to jako 100%.
+        let poziom: Float
     }
 
     @Published private(set) var pozycje: [Pozycja] = []
@@ -56,6 +58,9 @@ final class ModelMiksera: ObservableObject {
         GlosnoscAplikacji.posprzatajPoZamknietych()
         let grajace = Dzwiek.grajace()
         let wyciszone = GlosnoscAplikacji.wyciszone
+        // Program przyciszony ma zostac na liscie takze wtedy, gdy chwilowo milczy -
+        // inaczej znikalby razem z suwakiem, ktory czlowiek wlasnie ustawil.
+        let zmienione = GlosnoscAplikacji.zmienione
 
         // Pokazujemy tylko programy WIDOCZNE dla czlowieka. Dzwiek zglasza procesy
         // pomocnicze (np. Chrome Helper), ale nikt nie szuka na liscie pomocnika -
@@ -66,12 +71,14 @@ final class ModelMiksera: ObservableObject {
             let pid = program.processIdentifier
             let gra = grajace.contains(pid)
             let wyciszony = wyciszone.contains(pid)
-            guard gra || wyciszony else { continue }
+            let zmieniony = zmienione.contains(pid)
+            guard gra || wyciszony || zmieniony else { continue }
             wynik.append(Pozycja(id: pid,
                                  nazwa: program.localizedName ?? "pid \(pid)",
                                  ikona: program.icon,
                                  gra: gra,
-                                 wyciszony: wyciszony))
+                                 wyciszony: wyciszony,
+                                 poziom: GlosnoscAplikacji.poziom(pid: pid)))
         }
         pozycje = wynik.sorted { $0.nazwa.localizedCaseInsensitiveCompare($1.nazwa) == .orderedAscending }
 
@@ -88,6 +95,24 @@ final class ModelMiksera: ObservableObject {
     func przelacz(_ pid: pid_t) {
         GlosnoscAplikacji.przelaczWyciszenie(pid: pid)
         odswiez()
+    }
+
+    /// Suwak przy programie. Ustawiamy od razu - dzwiek ma isc za palcem, a nie
+    /// za puszczeniem myszy.
+    func ustawPoziom(_ pid: pid_t, _ nowy: Float) {
+        let osiagniety = GlosnoscAplikacji.ustawPoziom(pid: pid, nowy)
+        // Gdy toru nie da sie zbudowac, poziom wraca do 100% - i suwak ma to
+        // pokazac, zamiast stac w miejscu, w ktorym nic sie nie stalo.
+        if abs(osiagniety - nowy) > 0.01 { odswiez() } else { odswiezCicho(pid: pid, poziom: osiagniety) }
+    }
+
+    /// Zmiana samego poziomu bez pytania systemu o cala liste - suwak ciagniety
+    /// mysza wywolywalby inaczej kilkadziesiat odczytow CoreAudio na sekunde.
+    private func odswiezCicho(pid: pid_t, poziom: Float) {
+        guard let miejsce = pozycje.firstIndex(where: { $0.id == pid }) else { return }
+        let stara = pozycje[miejsce]
+        pozycje[miejsce] = Pozycja(id: stara.id, nazwa: stara.nazwa, ikona: stara.ikona,
+                                   gra: stara.gra, wyciszony: poziom <= 0.0001, poziom: poziom)
     }
 }
 
@@ -132,6 +157,13 @@ struct MikserView: View {
                 .frame(maxHeight: 260)
             }
 
+            if GlosnoscAplikacji.dostepne, !model.pozycje.isEmpty {
+                Text("Suwak przy programie zmienia głośność TYLKO jego — reszta gra jak grała. 100% znaczy, że program nie przechodzi przez mikser w ogóle.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if !GlosnoscAplikacji.dostepne {
                 Text("Wyciszanie pojedynczego programu wymaga macOS 14.2 lub nowszego.")
                     .font(.system(size: 10.5)).foregroundStyle(.secondary)
@@ -164,37 +196,55 @@ struct MikserView: View {
     }
 
     private func wiersz(_ pozycja: ModelMiksera.Pozycja) -> some View {
-        HStack(spacing: 10) {
-            if let ikona = pozycja.ikona {
-                Image(nsImage: ikona).resizable().frame(width: 26, height: 26)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                if let ikona = pozycja.ikona {
+                    Image(nsImage: ikona).resizable().frame(width: 26, height: 26)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(pozycja.nazwa)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .lineLimit(1)
+                    Text(podpis(pozycja))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(barwaPodpisu(pozycja))
+                }
+                Spacer(minLength: 8)
+                if pozycja.gra, !pozycja.wyciszony {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                        .shadow(color: Color.green.opacity(0.8), radius: 4)
+                }
+                Button {
+                    model.przelacz(pozycja.id)
+                } label: {
+                    Image(systemName: pozycja.wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(pozycja.wyciszony ? Color.orange : Color.white)
+                        .frame(width: 30, height: 26)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(pozycja.wyciszony ? 0.20 : 0.12)))
+                }
+                .buttonStyle(.plain)
+                .disabled(!GlosnoscAplikacji.dostepne)
+                .help(pozycja.wyciszony ? "Przywróć dźwięk" : "Wycisz ten program")
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(pozycja.nazwa)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .lineLimit(1)
-                Text(pozycja.wyciszony ? "wyciszony" : "gra teraz")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(pozycja.wyciszony ? Color.orange : Color.green)
+
+            // Suwak TEGO programu - to jest ta rzecz, ktorej macOS nie ma, a
+            // Windows i Android maja. 100% znaczy „nie dotykamy niczego".
+            HStack(spacing: 10) {
+                Slider(
+                    value: Binding(
+                        get: { Double(pozycja.poziom) },
+                        set: { model.ustawPoziom(pozycja.id, Float($0)) }
+                    ),
+                    in: 0...2
+                )
+                .disabled(!GlosnoscAplikacji.dostepne)
+                Text("\(Int((pozycja.poziom * 100).rounded()))%")
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .frame(width: 42, alignment: .trailing)
+                    .foregroundStyle(pozycja.poziom > 1.01 ? Color.orange : Color.primary)
             }
-            Spacer(minLength: 8)
-            // Zywy wskaznik: swieci przy tym, co naprawde wysyla dzwiek.
-            if pozycja.gra, !pozycja.wyciszony {
-                Circle().fill(Color.green).frame(width: 7, height: 7)
-                    .shadow(color: Color.green.opacity(0.8), radius: 4)
-            }
-            Button {
-                model.przelacz(pozycja.id)
-            } label: {
-                Image(systemName: pozycja.wyciszony ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(pozycja.wyciszony ? Color.orange : Color.white)
-                    .frame(width: 30, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(pozycja.wyciszony ? 0.20 : 0.12)))
-            }
-            .buttonStyle(.plain)
-            .disabled(!GlosnoscAplikacji.dostepne)
-            .help(pozycja.wyciszony ? "Przywróć dźwięk" : "Wycisz ten program")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -208,6 +258,19 @@ struct MikserView: View {
                                                 : Color.white.opacity(0.10),
                               lineWidth: 1)
         )
+    }
+
+    private func podpis(_ pozycja: ModelMiksera.Pozycja) -> String {
+        if pozycja.wyciszony { return "wyciszony" }
+        if pozycja.poziom > 1.01 { return "wzmocniony do \(Int((pozycja.poziom * 100).rounded()))%" }
+        if pozycja.poziom < 0.99 { return "przyciszony do \(Int((pozycja.poziom * 100).rounded()))%" }
+        return pozycja.gra ? "gra teraz" : "cicho"
+    }
+
+    private func barwaPodpisu(_ pozycja: ModelMiksera.Pozycja) -> Color {
+        if pozycja.wyciszony { return .orange }
+        if abs(pozycja.poziom - 1.0) > 0.01 { return Barwy.blekit }
+        return pozycja.gra ? .green : .secondary
     }
 
     private var tlo: some View {

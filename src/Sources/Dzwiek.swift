@@ -122,6 +122,72 @@ enum Dzwiek {
         return wynik
     }
 
+
+    // MARK: Rodzina procesow programu
+    //
+    // Powod: dzwiek zglasza proces POMOCNICZY. Zmierzone 6 wrzesnia 2026 na
+    // zywym Chrome - gral pid 2950 (`com.google.Chrome.helper`), a nie 671
+    // (`com.google.Chrome`), w ktory czlowiek klika w mikserze. Wyciszanie
+    // po samym pidzie programu nie mialo prawa zadzialac i nie dzialalo.
+
+    /// Program i wszyscy jego potomkowie.
+    static func rodzina(_ korzen: pid_t) -> Set<pid_t> {
+        var rodzice: [pid_t: pid_t] = [:]
+        for proces in spisProcesow() {
+            rodzice[proces.kp_proc.p_pid] = proces.kp_eproc.e_ppid
+        }
+        var wynik: Set<pid_t> = [korzen]
+        // Idziemy od kazdego procesu w GORE do korzenia - drzewo bywa glebokie
+        // (helper helpera), a ta droga jest krotsza niz budowanie listy dzieci.
+        for (dziecko, _) in rodzice {
+            var biezacy = dziecko
+            for _ in 0..<8 {
+                guard let rodzic = rodzice[biezacy], rodzic > 1 else { break }
+                if rodzic == korzen {
+                    wynik.insert(dziecko)
+                    break
+                }
+                biezacy = rodzic
+            }
+        }
+        return wynik
+    }
+
+    /// Obiekty audio wszystkich procesow programu - to one ida do przechwycenia.
+    static func obiektyAudio(rodzinyProgramu korzen: pid_t) -> [AudioObjectID] {
+        let klan = rodzina(korzen)
+        var adres = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var rozmiar: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject),
+                                             &adres, 0, nil, &rozmiar) == noErr, rozmiar > 0 else {
+            return []
+        }
+        var obiekty = [AudioObjectID](repeating: 0, count: Int(rozmiar) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                         &adres, 0, nil, &rozmiar, &obiekty) == noErr else {
+            return []
+        }
+        return obiekty.filter { obiekt in
+            guard let pid = pidProcesu(obiekt) else { return false }
+            return klan.contains(pid)
+        }
+    }
+
+    private static func spisProcesow() -> [kinfo_proc] {
+        var zapytanie: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
+        var rozmiar = 0
+        guard sysctl(&zapytanie, 4, nil, &rozmiar, nil, 0) == 0, rozmiar > 0 else { return [] }
+        let ile = rozmiar / MemoryLayout<kinfo_proc>.stride
+        var tablica = [kinfo_proc](repeating: kinfo_proc(), count: ile)
+        guard sysctl(&zapytanie, 4, &tablica, &rozmiar, nil, 0) == 0 else { return [] }
+        let realnie = rozmiar / MemoryLayout<kinfo_proc>.stride
+        return Array(tablica.prefix(realnie))
+    }
+
     private static func rodzicProcesu(_ pid: pid_t) -> pid_t? {
         var informacje = kinfo_proc()
         var rozmiar = MemoryLayout<kinfo_proc>.size

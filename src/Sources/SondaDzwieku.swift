@@ -17,18 +17,26 @@ enum SondaDzwieku {
     /// Czy program zostal uruchomiony jako sonda (a nie jako przelacznik okien).
     static var zadana: Bool {
         let a = CommandLine.arguments
-        return a.contains("--co-gra") || a.contains("--wycisz")
+        return a.contains("--co-gra") || a.contains("--wycisz") || a.contains("--glosnosc")
     }
 
     static func wykonaj() {
         let argumenty = CommandLine.arguments
         wypiszGrajace()
 
-        guard let miejsce = argumenty.firstIndex(of: "--wycisz"),
-              miejsce + 1 < argumenty.count,
-              let pid = pid_t(argumenty[miejsce + 1]) else {
-            exit(0)
+        // `--glosnosc <pid> <procent>` ustawia poziom TEGO programu; `--wycisz <pid>`
+        // to skrot na zero procent. Obie drogi konczy przywrocenie.
+        var pid: pid_t?
+        var procent: Float = 0
+        if let miejsce = argumenty.firstIndex(of: "--glosnosc"), miejsce + 1 < argumenty.count {
+            pid = pid_t(argumenty[miejsce + 1])
+            if miejsce + 2 < argumenty.count, let liczba = Float(argumenty[miejsce + 2]) {
+                procent = liczba
+            }
+        } else if let miejsce = argumenty.firstIndex(of: "--wycisz"), miejsce + 1 < argumenty.count {
+            pid = pid_t(argumenty[miejsce + 1])
         }
+        guard let pid else { exit(0) }
 
         guard GlosnoscAplikacji.dostepne else {
             print("wyciszanie pojedynczego programu wymaga macOS 14.2 lub nowszego")
@@ -37,14 +45,32 @@ enum SondaDzwieku {
 
         let sekundy = liczbaPo("--na") ?? 8
         let nazwa = NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)"
-        guard GlosnoscAplikacji.przelaczWyciszenie(pid: pid) else {
-            print("NIE UDALO SIE wyciszyc: \(nazwa)")
+        let rodzina = Dzwiek.rodzina(pid).sorted()
+        print("rodzina procesow: \(rodzina.count) (\(rodzina.prefix(8).map(String.init).joined(separator: ", "))\(rodzina.count > 8 ? ", …" : ""))")
+        print("procesy audio programu: \(Dzwiek.obiektyAudio(rodzinyProgramu: pid).count)")
+
+        let osiagniety = GlosnoscAplikacji.ustawPoziom(pid: pid, procent / 100)
+        guard abs(osiagniety - procent / 100) < 0.01 else {
+            print("NIE UDALO SIE ustawic poziomu: \(nazwa) — tor nie powstal")
             exit(1)
         }
-        print("wyciszone: \(nazwa) — na \(sekundy) s")
-        // Cisza ma miec koniec nawet po Ctrl-C.
+        print("\(nazwa): \(Int(procent))% — na \(sekundy) s")
+        // Poziom ma wrocic nawet po Ctrl-C.
         signal(SIGINT) { _ in GlosnoscAplikacji.przywrocWszystkie(); exit(130) }
-        Thread.sleep(forTimeInterval: sekundy)
+
+        // Szczyt probki to DOWOD, ze dzwiek plynie przez nasz tor. Zero przez caly
+        // czas znaczy, ze przechwycenie nic nie dostaje - i wtedy nie wolno mowic,
+        // ze wyciszanie dziala.
+        var najwyzszy: Float = 0
+        let koniec = Date().addingTimeInterval(sekundy)
+        while Date() < koniec {
+            Thread.sleep(forTimeInterval: 0.2)
+            najwyzszy = max(najwyzszy, GlosnoscAplikacji.szczyt(pid: pid))
+        }
+        print(String(format: "najglosniejsza probka w torze: %.4f", najwyzszy))
+        print(najwyzszy > 0.0001
+              ? "dzwiek PRZECHODZI przez mikser"
+              : "przez tor nie przeszlo nic - program prawdopodobnie nie gral")
         GlosnoscAplikacji.przywrocWszystkie()
         print("przywrocone: \(nazwa)")
         exit(0)
