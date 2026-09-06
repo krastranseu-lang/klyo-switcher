@@ -71,7 +71,11 @@ enum ZdarzeniaPrzegladarki {
             if let blad = odpowiedz.forKeyword(AEKeyword(keyErrorNumber))?.int32Value, blad != 0 {
                 return (0, Int(blad))
             }
-            return (Int(odpowiedz.int32Value), 0)
+            // Wynik lezy w parametrze bezposrednim odpowiedzi, a nie w niej samej.
+            // Czytanie calego rekordu dawalo zawsze zero - czyli pomiar mowil
+            // „przegladarka nie ma okien" niezaleznie od tego, ile ich ma.
+            let wynik = odpowiedz.forKeyword(AEKeyword(keyDirectObject)) ?? odpowiedz
+            return (Int(wynik.int32Value), 0)
         } catch let blad as NSError {
             return (0, blad.code)
         }
@@ -112,7 +116,8 @@ enum ZdarzeniaPrzegladarki {
             if let blad = odpowiedz.forKeyword(AEKeyword(keyErrorNumber))?.int32Value, blad != 0 {
                 return (nil, Int(blad))
             }
-            return (odpowiedz.stringValue, 0)
+            let wynik = odpowiedz.forKeyword(AEKeyword(keyDirectObject)) ?? odpowiedz
+            return (wynik.stringValue, 0)
         } catch let blad as NSError {
             return (nil, blad.code)
         }

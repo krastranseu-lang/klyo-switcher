@@ -21,9 +21,9 @@
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Klyo Switcher używa przechwytywania dźwięku wyłącznie po to, żeby wyciszyć wskazany przez Ciebie program. Dźwięk nie jest nagrywany ani nigdzie wysyłany.</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.55.6</string>
+	<string>1.55.7</string>
 	<key>CFBundleVersion</key>
-	<string>75</string>
+	<string>76</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
