@@ -499,11 +499,17 @@ struct SwitcherView: View {
                 )
 
             if let thumbnail = item.thumbnail {
+                // Zrzut WYPELNIA kadr, zamiast miescic sie w nim w calosci.
+                // Okna sa rozne, kadr jest jeden - przy mieszczeniu w calosci kazda
+                // karta miala po bokach szare pasy roznej szerokosci i rzad kart
+                // wygladal jak plot z nierownych desek. Gora okna (pasek tytulu,
+                // karty, tresc) i tak niesie cala rozpoznawalnosc, wiec kadrujemy
+                // od gory - nic wartego zapamietania nie znika.
                 Image(nsImage: thumbnail)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(3)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .clipped()
             } else if let icon = item.icon {
                 Image(nsImage: icon)
                     .resizable()
