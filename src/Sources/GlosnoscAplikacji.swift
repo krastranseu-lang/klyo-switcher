@@ -13,7 +13,8 @@ import CoreAudio
 //     pid 65391 -> obiekt audio 125 (blad 0)
 //     AudioHardwareCreateProcessTap: 0 OK, tapID = 127
 // Pierwsze podejscie zwrocilo `!obj`, bo opis tapu oczekuje IDENTYFIKATOROW
-// OBIEKTOW AUDIO, a nie pidow - stad tlumaczenie przez `id2p`.
+// OBIEKTOW AUDIO, a nie pidow - stad tlumaczenie przez `id2p`. Swift bierze je
+// jako zwykle `AudioObjectID`, nie jako `NSNumber` - opakowanie nie kompiluje sie.
 //
 // Niezmiennik: kazde wyciszenie da sie cofnac. Tapy trzymamy w slowniku i
 // niszczymy przy przywroceniu oraz przy zamykaniu programu - inaczej czyjs
@@ -45,7 +46,7 @@ enum GlosnoscAplikacji {
             return false
         }
         guard let obiekt = obiektProcesu(pid: pid) else { return false }
-        let opis = CATapDescription(stereoMixdownOfProcesses: [NSNumber(value: obiekt)])
+        let opis = CATapDescription(stereoMixdownOfProcesses: [obiekt])
         opis.name = "Klyo Switcher — wyciszenie"
         opis.uuid = UUID()
         opis.isPrivate = true
