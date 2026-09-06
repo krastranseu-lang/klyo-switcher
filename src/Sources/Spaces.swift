@@ -252,26 +252,30 @@ enum WindowFocus {
         // z ktorego wlasnie wyszlismy.
         _ = setFront(&psn, windowID, userGenerated)
 
-        // Dwa rekordy zdarzen (aktywacja okna i nadanie mu statusu "key") w ukladzie
-        // bajtow znanym z Hammerspoon #370 i AltTab. Bez nich okno jest na wierzchu,
-        // ale klawiatura dalej pisze do poprzedniego.
-        for kind: UInt8 in [0x01, 0x02] {
-            var record = [UInt8](repeating: 0, count: recordLength)
-            record[0x04] = 0xF8
-            record[0x08] = kind
-            record[0x3A] = 0x10
-            for offset in 0x20..<0x30 {
-                record[offset] = 0xFF
-            }
-            withUnsafeBytes(of: windowID) { raw in
-                for (index, byte) in raw.enumerated() {
-                    record[0x3C + index] = byte
-                }
-            }
-            record.withUnsafeMutableBufferPointer { buffer in
-                guard let base = buffer.baseAddress else { return }
-                _ = post(&psn, base)
-            }
+        // JEDEN rekord zdarzenia: wcisniecie lewego przycisku myszy „w to okno",
+        // wycelowane daleko poza jego tresc. Uklad bajtow przepisany z AltTab
+        // (src/macos/api-wrappers/SkyLight.framework.swift, zweryfikowany przez
+        // nich na macOS 26.5), ktory rozni sie od naszego dawnego w trzech miejscach
+        // i kazde z nich AltTab uzasadnia pomiarem:
+        //   - bufor 0x100 zamiast 0xF8: WindowServer od 14.7.4 czyta poza rekord,
+        //   - sam DOWN (typ 0x01), bez UP: para down/up to juz klikniecie,
+        //     a sam down wystarcza, zeby okno stalo sie „key",
+        //   - punkt (300000, 300000) zamiast NaN: NaN niektore programy zamieniaja
+        //     na (0,0), czyli klikaja w lewy gorny rog wlasnej tresci.
+        var record = [UInt8](repeating: 0, count: 0x100)
+        record[0x04] = 0xF8          // deklarowana dlugosc rekordu
+        record[0x08] = 0x01          // kCGEventLeftMouseDown
+        record[0x3A] = 0x10          // flaga o nieznanym znaczeniu; yabai i Hammerspoon ustawiaja 0x10
+        var punkt = CGPoint(x: 300_000, y: 300_000)
+        withUnsafeBytes(of: &punkt) { raw in
+            for (index, byte) in raw.enumerated() { record[0x20 + index] = byte }
+        }
+        withUnsafeBytes(of: windowID) { raw in
+            for (index, byte) in raw.enumerated() { record[0x3C + index] = byte }
+        }
+        record.withUnsafeMutableBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            _ = post(&psn, base)
         }
         return true
     }

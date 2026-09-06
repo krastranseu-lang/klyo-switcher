@@ -493,17 +493,31 @@ enum WindowActivator {
             //   kAXRaiseAction - „causes a window to become as frontmost as is
             //   allowed by the containing application's circumstances".
             //
-            // Robimy wiec dokladnie to, co przewidzial system: ustepujemy
-            // aktywacji, prosimy program o aktywacje i CZEKAMY. Jesli system
-            // przeszedl na biurko okna - podnosimy okno. Jesli nie przeszedl -
-            // nie robimy nic, bo kazdy nasz ruch skonczylby sie przeniesieniem
-            // OKNA do nas, czyli tym, czego wlasciciel projektu zakazal.
-            activateApp(pid: pid)
-            poczekajNaBiurko(cel, prob: 12) {
-                DziennikBiurek.zapisz("system przeszedl na biurko okna: \(DziennikBiurek.stanBiurek())")
+            // Krok 1 - dokladnie ten, ktory robi AltTab (kod sprawdzony przez nich na
+            // macOS 26.5): `_SLPSSetFrontProcessWithOptions` z numerem OKNA, a zaraz
+            // po nim jeden rekord „wcisniecie myszy w to okno" wycelowany daleko poza
+            // jego tresc. To WindowServer wykonuje wtedy prawdziwe przejscie na biurko
+            // okna - z animacja, z Mission Control, bez atrapy. Dawny uklad bajtow
+            // (dwa rekordy, punkt NaN, bufor 0xF8) byl tym, co u nas nie dzialalo.
+            //
+            // Niezmiennik zostaje: okna nie dotykamy, dopoki system NIE POTWIERDZI
+            // biurka. Gdy nie potwierdzi - zapas w postaci aktywacji programu
+            // (droga publiczna), a po niej znow czekanie. Gdy i to nic nie da - nic
+            // wiecej, bo kazdy dalszy ruch skonczylby sie przeniesieniem OKNA do nas.
+            let przyjete = WindowFocus.bring(windowID: windowID, pid: pid)
+            DziennikBiurek.zapisz("WindowServer (uklad AltTab): \(przyjete ? "przyjete" : "odmowa")")
+            poczekajNaBiurko(cel, prob: 8) {
                 podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
                 dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
                                    programNaWierzchuZrodla: programNaWierzchuZrodla)
+            } gdyBrak: {
+                DziennikBiurek.zapisz("WindowServer nie przeszedl - zapas: aktywacja programu")
+                activateApp(pid: pid)
+                poczekajNaBiurko(cel, prob: 8) {
+                    podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+                    dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                       programNaWierzchuZrodla: programNaWierzchuZrodla)
+                }
             }
             return
         }
@@ -585,7 +599,11 @@ enum WindowActivator {
     /// biurku - a wtedy system robi rzecz odwrotna do zamierzonej: przynosi okno
     /// do nas, zamiast przeniesc nas do okna. Wolimy poczekac 1,2 s niz wyrwac
     /// komus okno z drugiego biurka.
-    private static func poczekajNaBiurko(_ biurko: SpaceID, prob: Int, dalej: @escaping () -> Void) {
+    /// `gdyBrak` to droga zapasowa, gdy biurko sie nie potwierdzi; bez niej program
+    /// konczy jednym zdaniem na ekranie i nie rusza okna.
+    private static func poczekajNaBiurko(_ biurko: SpaceID, prob: Int,
+                                         dalej: @escaping () -> Void,
+                                         gdyBrak: (() -> Void)? = nil) {
         let mapa = Spaces.map()
         if !mapa.isAvailable || mapa.current.contains(biurko) {
             DziennikBiurek.zapisz("biurko \(biurko) potwierdzone - podnosze okno")
@@ -593,7 +611,11 @@ enum WindowActivator {
             return
         }
         guard prob > 1 else {
-            DziennikBiurek.zapisz("biurko \(biurko) NIE potwierdzone mimo czekania - nie ruszam okna")
+            DziennikBiurek.zapisz("biurko \(biurko) NIE potwierdzone mimo czekania")
+            if let gdyBrak {
+                gdyBrak()
+                return
+            }
             // Cisza w tym miejscu wyglada jak usterka. Jedno zdanie mowi, co sie
             // stalo i dlaczego program celowo nic nie zrobil.
             ToastPresenter.shared.show(
@@ -603,7 +625,7 @@ enum WindowActivator {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            poczekajNaBiurko(biurko, prob: prob - 1, dalej: dalej)
+            poczekajNaBiurko(biurko, prob: prob - 1, dalej: dalej, gdyBrak: gdyBrak)
         }
     }
 
