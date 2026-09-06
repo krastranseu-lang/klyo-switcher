@@ -12,6 +12,14 @@ if let plik = PodgladHUD.zadanaSciezka() {
     PodgladHUD.wykonaj(sciezka: plik, ciemny: CommandLine.arguments.contains("--ciemny"))
 }
 
+// Sonda dzwieku: wypisz, co gra (i ewentualnie wycisz na chwile) - to jedyny
+// sposob, zeby sprawdzic wyciszanie bez reki na klawiaturze.
+if SondaDzwieku.zadana {
+    _ = NSApplication.shared
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    SondaDzwieku.wykonaj()
+}
+
 let application = NSApplication.shared
 let controller = AppController()
 application.delegate = controller
