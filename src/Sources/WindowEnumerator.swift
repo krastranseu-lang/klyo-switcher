@@ -346,13 +346,32 @@ enum WindowActivator {
         // i czy trzeba naprawić stan biurka źródłowego.
         let mapa = Spaces.map()
         let biurkoZrodlowe = mapa.current.first
-        let naInnymBiurku: Bool = {
-            guard mapa.isAvailable, biurkoZrodlowe != nil else { return false }
-            // Nieznane biurko traktujemy jak „to samo": lepiej użyć zapasowej
-            // ścieżki niż pominąć ją tam, gdzie była potrzebna.
-            guard let biurkoOkna = Spaces.space(of: windowID) else { return false }
+        // Czy okno stoi na innym biurku — sprawdzane DWIEMA niezależnymi drogami.
+        //
+        // Droga pierwsza (SkyLight) bywa niedostępna: to prywatne funkcje systemu,
+        // które Apple może w każdej chwili przemianować. Gdy milczą, program nie
+        // wie, że okno jest gdzie indziej, i nie robi nic — objaw jest wtedy taki,
+        // jakby przełączanie w ogóle nie istniało.
+        //
+        // Droga druga nie zależy od niczego prywatnego: system pytany o okna
+        // WIDOCZNE NA EKRANIE pomija te z innych biurek. Okno, którego tam nie ma,
+        // a które nie jest zminimalizowane, leży na innym biurku.
+        let biurkoOkna = Spaces.space(of: windowID)
+        let wedlugSkyLight: Bool? = {
+            guard mapa.isAvailable, biurkoZrodlowe != nil, let biurkoOkna else { return nil }
             return !mapa.current.contains(biurkoOkna)
         }()
+        let wedlugWidocznosci = !wasMinimized && !oknoJestNaEkranie(windowID)
+        let naInnymBiurku = wedlugSkyLight ?? wedlugWidocznosci
+
+        DziennikBiurek.zapisz("""
+            wybor okna \(windowID) (pid \(pid))
+              \(DziennikBiurek.stanBiurek())
+              biurko okna: \(biurkoOkna.map(String.init) ?? "nieznane")
+              inne biurko wg SkyLight: \(wedlugSkyLight.map { $0 ? "TAK" : "nie" } ?? "nie wiadomo")
+              inne biurko wg widocznosci: \(wedlugWidocznosci ? "TAK" : "nie")
+              decyzja: \(naInnymBiurku ? "PRZESKOK" : "to samo biurko")
+            """)
         let programNaWierzchuZrodla = naInnymBiurku
             ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
 
@@ -377,9 +396,10 @@ enum WindowActivator {
             // myszą działa, a wybór klawiaturą nie. Naciśnięcie Ctrl+strzałki —
             // tego samego skrótu, który macOS wykonuje przy geście trzema palcami —
             // system wykonuje zawsze, bo to zwykłe zdarzenie klawiatury.
-            let biurkoCelu = Spaces.space(of: windowID)
+            let biurkoCelu = biurkoOkna
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                 let poZmianie = Spaces.map()
+                DziennikBiurek.zapisz("po probie WindowServera: \(DziennikBiurek.stanBiurek())")
                 let trzebaPrzejsc = poZmianie.isAvailable && biurkoCelu != nil
                     && !poZmianie.current.contains(biurkoCelu!)
                 guard trzebaPrzejsc,
@@ -390,7 +410,9 @@ enum WindowActivator {
                                        programNaWierzchuZrodla: programNaWierzchuZrodla)
                     return
                 }
+                DziennikBiurek.zapisz("WindowServer nie przelaczyl - przechodze skrotem o \(kroki) krok(ow)")
                 SkrotBiurka.przejdzKrokami(kroki) {
+                    DziennikBiurek.zapisz("po przejsciu skrotem: \(DziennikBiurek.stanBiurek())")
                     // Samo przejście biurka nie nadaje oknu fokusu — podnosimy je
                     // jeszcze raz, już na właściwym biurku.
                     _ = WindowFocus.bring(windowID: windowID, pid: pid)
@@ -407,6 +429,17 @@ enum WindowActivator {
         } else {
             activateApp(pid: pid)
         }
+    }
+
+    /// Czy okno jest WIDOCZNE na biezacym biurku.
+    ///
+    /// System pytany o okna „na ekranie" pomija te z innych biurek — to jedyny
+    /// sposob rozpoznania polozenia okna, ktory nie zalezy od prywatnych funkcji
+    /// i dziala tak samo w kazdej wersji macOS.
+    private static func oknoJestNaEkranie(_ windowID: CGWindowID) -> Bool {
+        guard let lista = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return true }
+        return lista.contains { ($0[kCGWindowNumber as String] as? CGWindowID) == windowID }
     }
 
     /// Domkniecie przeskoku: przywraca stan biurka, z ktorego wyszlismy.
