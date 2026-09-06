@@ -308,6 +308,29 @@ final class WindowEnumerator {
                 )
             )
         }
+        // Skład listy do raportu: bez tego wiadomo tylko, co użytkownik wybrał,
+        // a nie CO MIAŁ DO WYBORU. Gdy okna z innych biurek w ogóle nie trafiają
+        // na listę, objaw wygląda identycznie jak nieudane przełączanie — a to
+        // dwie zupełnie różne usterki.
+        var wgBiurek: [String: Int] = [:]
+        for (_, okna) in result {
+            for okno in okna {
+                let gdzie: String
+                switch okno.place {
+                case .here: gdzie = "biezace"
+                case .desktop(let n): gdzie = "biurko \(n)"
+                case .fullscreen: gdzie = "pelny ekran"
+                case .elsewhere: gdzie = "nieznane"
+                }
+                wgBiurek[gdzie, default: 0] += 1
+            }
+        }
+        let opis = wgBiurek.map { "\($0.key): \($0.value)" }.sorted().joined(separator: " · ")
+        DziennikBiurek.zapisz("""
+            sklad listy (tryb: \(mode == .currentDesktop ? "tylko biezace biurko" : "wszystkie biurka"))
+              okien wg polozenia: \(opis.isEmpty ? "brak" : opis)
+              spis systemowy zwrocil: \(all.count) wpisow, widocznych na ekranie: \(onScreen.count)
+            """)
         return result
     }
 }
