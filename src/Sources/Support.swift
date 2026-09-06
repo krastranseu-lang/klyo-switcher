@@ -577,6 +577,15 @@ enum Settings {
         set { defaults.set(newValue, forKey: Key.historiaSchowka) }
     }
 
+    /// Wlasna mechanika przechodzenia miedzy biurkami (skok prywatna funkcja
+    /// WindowServera i udawane Ctrl+strzalki). DOMYSLNIE WYLACZONA - biurkami
+    /// zarzadza system, a naszym interfejsem jest ⌘ Tab i nic wiecej. Zostaje
+    /// jako ukryta furtka, gdyby kiedys byla potrzebna swiadomie:
+    /// `defaults write pl.klyo.switcher wlasnaMechanikaBiurek -bool YES`
+    static var wlasnaMechanikaBiurek: Bool {
+        defaults.bool(forKey: "wlasnaMechanikaBiurek")
+    }
+
     /// Wklejanie pod ⌘V bez formatowania. Domyslnie WYLACZONE - to zmiana
     /// zachowania klawisza, ktorego uzywa sie setki razy dziennie, wiec musi byc
     /// swiadomym wyborem, a nie niespodzianka po aktualizacji.

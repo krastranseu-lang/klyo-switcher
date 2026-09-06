@@ -449,6 +449,44 @@ enum WindowActivator {
         }
 
         if naInnymBiurku {
+            // BIURKAMI ZARZADZA SYSTEM, NIE MY.
+            //
+            // Decyzja wlasciciela projektu po tym, jak wlasna mechanika biurek
+            // narobila szkody: „biurek raczej nie ruszamy, nasz jedyny interfejs
+            // to ⌘ Tab". Zostaje wiec dokladnie to, co robi macOS, gdy klikniesz
+            // ikone w Docku - aktywacja programu. To system decyduje, czy przejsc
+            // na biurko okna; robi tak, gdy w Ustawieniach systemowych zaznaczone
+            // jest „Przy przelaczaniu programu przejdz na biurko z jego oknami".
+            //
+            // Czego NIE robimy i dlaczego:
+            //   - nie skaczemy prywatna funkcja WindowServera (`skoczNaBiurko`),
+            //     bo to omijanie systemu, a nie korzystanie z niego,
+            //   - nie udajemy Ctrl+strzalek (`SkrotBiurka`), bo to wchodzenie
+            //     z butami w cudze skroty klawiszowe,
+            //   - nie dotykamy okna, dopoki system nie potwierdzi, ze stoimy na
+            //     jego biurku - podniesienie wykonane za wczesnie przynosi OKNO
+            //     do nas, zamiast nas do okna, i to wlasnie porozrzucalo okna.
+            // Oba narzedzia zostaja w kodzie (Spaces.swift) - nieuzywane, ale
+            // gotowe, gdyby kiedys byly potrzebne swiadomie.
+            DziennikBiurek.zapisz("okno na innym biurku - oddaje decyzje systemowi (aktywacja programu)")
+            activateApp(pid: pid)
+            guard let cel = biurkoOkna else {
+                DziennikBiurek.zapisz("nie znam biurka okna - zostawiam sprawe systemowi")
+                return
+            }
+            poczekajNaBiurko(cel, prob: 12) {
+                DziennikBiurek.zapisz("system przeszedl na biurko okna: \(DziennikBiurek.stanBiurek())")
+                podniesPoPrzeskoku(window: window, windowID: windowID, pid: pid)
+                dokonczPoPrzeskoku(pid: pid, biurkoZrodlowe: biurkoZrodlowe,
+                                   programNaWierzchuZrodla: programNaWierzchuZrodla)
+            }
+            return
+        }
+
+        // Dawna, wlasna mechanika biurek. Zostaje w kodzie i daje sie wlaczyc
+        // ukrytym ustawieniem (`defaults write pl.klyo.switcher wlasnaMechanikaBiurek -bool YES`),
+        // ale domyslnie MILCZY - patrz komentarz wyzej.
+        if Settings.wlasnaMechanikaBiurek, naInnymBiurku {
             // ŻADNEJ zapasowej aktywacji aplikacji przy przeskoku na inne biurko:
             // `NSRunningApplication.activate()` przy oknie na innym biurku potrafi
             // przywrócić biurko wyjściowe, czyli cofnąć to, co właśnie zrobiliśmy.
