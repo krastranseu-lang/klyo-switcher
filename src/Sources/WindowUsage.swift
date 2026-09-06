@@ -223,3 +223,69 @@ enum WindowActions {
         return force ? app.forceTerminate() : app.terminate()
     }
 }
+
+// MARK: - Ulubione: do czego naprawde wracasz
+
+/// Liczy, jak czesto wybierasz poszczegolne programy, i wskazuje trzy ulubione.
+///
+/// Licznik jest TRWALY (przezywa restart) i prowadzony per program, nie per okno:
+/// okna powstaja i znikaja, a przyzwyczajenie zostaje przy programie. Dzieki temu
+/// nowo otwarte okno Chrome od razu dostaje gwiazdke, jesli do Chrome wracasz
+/// najczesciej.
+///
+/// Stare wybory tanieja: co 500 wyborow wszystkie liczniki sa polowione. Bez tego
+/// program uzywany intensywnie przez jeden tydzien zostalby „ulubionym" na zawsze,
+/// a lista przestalaby odpowiadac temu, jak pracujesz TERAZ.
+enum Ulubione {
+    private static let kluczLicznikow = "ulubione.liczniki"
+    private static let kluczSumy = "ulubione.suma"
+    private static let progPolowienia = 500
+    private static let ile = 3
+
+    /// Kolejnosc miejsca: 0 = najczesciej wybierany, 1 = drugi, 2 = trzeci.
+    /// `nil`, gdy program nie miesci sie w pierwszej trojce.
+    static func miejsce(programu identyfikator: String) -> Int? {
+        czolowka().firstIndex(of: identyfikator)
+    }
+
+    static func zapiszWybor(identyfikator: String) {
+        guard !identyfikator.isEmpty else { return }
+        var liczniki = UserDefaults.standard.dictionary(forKey: kluczLicznikow) as? [String: Int] ?? [:]
+        liczniki[identyfikator, default: 0] += 1
+
+        var suma = UserDefaults.standard.integer(forKey: kluczSumy) + 1
+        if suma >= progPolowienia {
+            // Polowienie zamiast kasowania: program, do ktorego wracales przez rok,
+            // nie znika z listy po tygodniu przerwy - tylko traci przewage.
+            for (klucz, wartosc) in liczniki {
+                let nowa = wartosc / 2
+                if nowa > 0 { liczniki[klucz] = nowa } else { liczniki.removeValue(forKey: klucz) }
+            }
+            suma = 0
+        }
+        UserDefaults.standard.set(liczniki, forKey: kluczLicznikow)
+        UserDefaults.standard.set(suma, forKey: kluczSumy)
+        pamiec = nil
+    }
+
+    /// Pierwsza trojka, przeliczana najwyzej raz na sesje pokazania listy.
+    /// Lista otwiera sie setki razy dziennie - sortowanie slownika przy kazdym
+    /// wierszu byloby praca bez powodu.
+    private static var pamiec: [String]?
+
+    static func odswiez() { pamiec = nil }
+
+    private static func czolowka() -> [String] {
+        if let pamiec { return pamiec }
+        let liczniki = UserDefaults.standard.dictionary(forKey: kluczLicznikow) as? [String: Int] ?? [:]
+        // Gwiazdka ma znaczyc „wracasz tu naprawde czesto". Przy dwoch wyborach
+        // nie znaczy nic - dlatego prog minimalny.
+        let wynik = liczniki
+            .filter { $0.value >= 3 }
+            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+            .prefix(ile)
+            .map(\.key)
+        pamiec = Array(wynik)
+        return pamiec ?? []
+    }
+}
