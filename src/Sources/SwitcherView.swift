@@ -608,6 +608,9 @@ struct SwitcherView: View {
     /// w calosci (bez ucinania), jak w podgladzie Windows i Mission Control.
     private func preview(for item: SwitcherItem, showsControls: Bool, isSelected: Bool) -> some View {
         let symbol = Settings.modifier.symbol
+        // Ten sam stan co w karcie - pusta gwiazdka „dodaj do ulubionych" ma sie
+        // pokazywac tylko pod kursorem, zeby nie zasmiecac calej listy.
+        let podKursorem = model.hoveredID == item.id
         return ZStack(alignment: .topLeading) {
             // Kadr bez zrzutu ma wygladac na zamierzony, a nie na pusty. Plaski
             // ciemny prostokat czyta sie jak „cos sie nie wczytalo"; delikatny
