@@ -305,6 +305,9 @@ final class SwitcherController {
         // Historia uzycia aktualizuje sie od razu, a nie dopiero gdy system
         // przesle powiadomienie o zmianie aktywnej aplikacji.
         usage.noteSelection(windowID: item.windowID, pid: item.pid)
+        // Każdy wybór buduje obraz tego, do czego naprawdę wracasz — stąd biorą
+        // się gwiazdki na kartach.
+        Ulubione.zapiszWybor(identyfikator: item.bundleID)
         // Rozmowa z aplikacja docelowa (Accessibility, AppleScript) moze potrwac -
         // idzie poza callbackiem podsluchu, ktory ma juz byc wolny.
         let browsers = self.browsers
