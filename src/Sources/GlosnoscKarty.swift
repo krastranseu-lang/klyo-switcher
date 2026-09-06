@@ -150,7 +150,9 @@ enum GlosnoscKarty {
         case .wlaczony, .brakPozycji:
             return .gotowe
         case .wylaczony:
-            return PrzelacznikJS.wlacz(pid: pid) ? .gotowe : .javascriptWylaczony
+            // Nie wlaczamy tego sami - patrz `PrzelacznikJS`. Program mowi, czego
+            // brakuje; nie wyciaga cudzych okien na wierzch, zeby to klikac.
+            return .javascriptWylaczony
         }
     }
 

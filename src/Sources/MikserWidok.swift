@@ -195,6 +195,9 @@ struct MikserView: View {
                 przyciskGlosnika(wyciszony: karta.wyciszona, duzy: false) {
                     model.przelaczKarte(karta)
                 }
+                .help(KartyDzwieku.ciszaBezPokazywania(karta)
+                      ? (karta.wyciszona ? "Przywróć dźwięk tej karty" : "Wycisz tę kartę")
+                      : "Wycisz tę kartę (Chrome pokaże na moment swoje menu — innej drogi nie udostępnia)")
             }
             suwak(wartosc: Binding(get: { Double(poziom) },
                                    set: { model.ustawPoziomKarty(karta, Float($0)) }),

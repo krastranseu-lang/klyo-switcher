@@ -31,66 +31,15 @@ enum PrzelacznikJS {
         return znacznik.isEmpty ? .wylaczony : .wlaczony
     }
 
-    /// Wlacza przelacznik, jesli jest wylaczony. Zwraca `true`, gdy po wszystkim
-    /// jest wlaczony.
-    @discardableResult
-    static func wlacz(pid: pid_t) -> Bool {
-        guard let pozycja = znajdz(pid: pid) else { return false }
-        let znacznik = (axCopy(pozycja, "AXMenuItemMarkChar") as? String) ?? ""
-        if !znacznik.isEmpty { return true }
-        // Pasek menu nalezy do aplikacji AKTYWNEJ - w nieaktywnej nie da sie w nim
-        // nic nacisnac. Zmierzone: przy nieaktywnym Chrome konczylo sie na
-        // „wylaczony -> nadal wylaczony". Wysuwamy wiec przegladarke na wierzch
-        // na te dwa klikniecia; to jest jednorazowe i na wyrazne zyczenie czlowieka.
-        let poprzedni = NSWorkspace.shared.frontmostApplication
-        NSRunningApplication(processIdentifier: pid)?.activate()
-        Thread.sleep(forTimeInterval: 0.35)
-        defer {
-            if let poprzedni, poprzedni.processIdentifier != pid { poprzedni.activate() }
-        }
-
-        // Menu trzeba OTWORZYC, zeby dalo sie w nim kliknac. Zmierzone: samo
-        // nacisniecie ukrytej pozycji konczy sie niczym. Otwieramy wiec cala
-        // droge: pozycja paska, potem podmenu.
-        for rodzic in droga(do: pozycja).reversed() {
-            AXUIElementPerformAction(rodzic, kAXPressAction as CFString)
-            Thread.sleep(forTimeInterval: 0.18)
-        }
-        AXUIElementPerformAction(pozycja, kAXPressAction as CFString)
-        // Chrome przerysowuje menu po chwili - pytanie o stan od razu potrafi
-        // zastac jeszcze stara wartosc.
-        var wlaczony = false
-        for _ in 0..<6 {
-            Thread.sleep(forTimeInterval: 0.15)
-            if stan(pid: pid) == .wlaczony { wlaczony = true; break }
-        }
-        if !wlaczony { zamknijMenu() }
-        return wlaczony
-    }
-
-    /// Pozycje menu, ktore trzeba nacisnac, zeby dojsc do tej najglebszej -
-    /// od niej w gore, do paska menu.
-    private static func droga(do pozycja: AXUIElement) -> [AXUIElement] {
-        var wynik: [AXUIElement] = []
-        var biezacy = pozycja
-        for _ in 0..<6 {
-            guard let rodzic = axCopy(biezacy, kAXParentAttribute),
-                  CFGetTypeID(rodzic) == AXUIElementGetTypeID() else { break }
-            let element = rodzic as! AXUIElement
-            let rola = (axCopy(element, kAXRoleAttribute) as? String) ?? ""
-            if rola == kAXMenuBarRole { break }
-            // Menu samo w sobie sie nie naciska - naciska sie pozycje, ktora je otwiera.
-            if rola == kAXMenuItemRole || rola == kAXMenuBarItemRole { wynik.append(element) }
-            biezacy = element
-        }
-        return wynik
-    }
-
-    private static func zamknijMenu() {
-        guard let zrodlo = CGEventSource(stateID: .hidSystemState) else { return }
-        CGEvent(keyboardEventSource: zrodlo, virtualKey: 53, keyDown: true)?.post(tap: .cghidEventTap)
-        CGEvent(keyboardEventSource: zrodlo, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
-    }
+    // Nie ma tu funkcji „wlacz" i nie bedzie. Zmierzone na zywym systemie:
+    // pozycji w pasku menu nie da sie nacisnac, dopoki program nie jest AKTYWNY -
+    // otwarte podmenu Chrome bylo w calosci wyszarzone, bo na wierzchu stal inny
+    // program. Zeby to obejsc, trzeba by wyciagac przegladarke na wierzch, a to
+    // jest dokladnie to, czego w tym programie byc nie moze: wszystko ma sie
+    // dziac w tle, bez ruszania tego, co czlowiek ma przed soba.
+    //
+    // Zostaje wiec sam ODCZYT - po to, zeby okno mogło powiedziec prawde o tym,
+    // czego brakuje, zamiast milczec albo udawac.
 
     /// Szuka pozycji w PASKU MENU programu - nie w menu kontekstowym.
     private static func znajdz(pid: pid_t) -> AXUIElement? {

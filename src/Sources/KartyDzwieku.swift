@@ -188,6 +188,16 @@ enum KartyDzwieku {
         AXUIElementPerformAction(karta.element, kAXPressAction as CFString)
     }
 
+    /// Czy te karte da sie wyciszyc BEZ pokazywania czegokolwiek na ekranie.
+    ///
+    /// Safari daje przycisk wprost na karcie - nacisniecie go niczego nie otwiera
+    /// i nie wymaga, zeby przegladarka byla na wierzchu (zmierzone: „wycisz kartę"
+    /// zmienilo sie w „włącz dźwięk karty" przy nieaktywnym Safari).
+    /// Chromium ma tylko menu karty, ktore widac na ekranie.
+    static func ciszaBezPokazywania(_ karta: KartaGrajaca) -> Bool {
+        przyciskWyciszenia(karta.element) != nil
+    }
+
     /// Wycisza (albo odcisza) POJEDYNCZA karte przez jej wlasne menu.
     ///
     /// To jedyna droga, jaka przegladarka daje: nie ma na to ani API, ani skrotu
