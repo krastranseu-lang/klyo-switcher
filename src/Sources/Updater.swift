@@ -277,6 +277,10 @@ final class Updater {
         # Dlatego nowa wersje najpierw kladziemy OBOK, a potem przestawiamy nazwy:
         # stary schodzi na bok, nowy wchodzi na jego miejsce. Dla systemu to caly
         # czas ten sam program pod ta sama sciezka, wiec zgody trwaja.
+        # Od tego miejsca sami pilnujemy bledow. Gdyby skrypt mial prawo umrzec
+        # w polowie podmiany, czlowiek zostalby bez programu - a to najgorsze,
+        # co aktualizacja moze zrobic.
+        set +e
         katalog_celu=$(/usr/bin/dirname "$cel")
         obok="$katalog_celu/.klyo-nowa-$$.app"
         ustepujaca="$katalog_celu/.klyo-poprzednia-$$.app"
@@ -293,26 +297,11 @@ final class Updater {
           echo "podmiana sie nie powiodla - zostaje poprzednia wersja"
           exit 1
         fi
-        /bin/rm -rf "$ustepujaca" "$katalog" "$paczka"
-
-        # Kopie z numerem w nazwie („Klyo Switcher 2.app") biora sie stad, ze nowy
-        # plik trafil OBOK starego zamiast na jego miejsce. Kazda taka kopia to dla
-        # systemu osobny program z osobna zgoda - a uruchamia sie zwykle nie ta,
-        # ktorej zgode wlaczyl uzytkownik. Zostawiamy jedna, wlasciwa.
-        nazwa_bazowa=$(/usr/bin/basename "$cel" .app)
-        for katalog_kopii in /Applications "$HOME/Applications" "$HOME/Downloads" "$HOME/Desktop"; do
-          [ -d "$katalog_kopii" ] || continue
-          for kopia in "$katalog_kopii/$nazwa_bazowa "*.app; do
-            [ -e "$kopia" ] || continue
-            [ "$kopia" = "$cel" ] && continue
-            reszta=$(/usr/bin/basename "$kopia" .app | /usr/bin/sed "s/^${nazwa_bazowa} //")
-            case "$reszta" in
-              ''|*[!0-9]*) continue ;;   # tylko czysty numer, nic innego nie ruszamy
-            esac
-            echo "usuwam zbedna kopie: $kopia"
-            /bin/rm -rf "$kopia"
-          done
-        done
+        # UWAGA: poprzedniej wersji NIE kasujemy tutaj. Zostaje na dysku do chwili,
+        # gdy nowa naprawde wystartuje - inaczej kazdy blad po tym miejscu zostawia
+        # czlowieka bez dzialajacego programu. Kasujemy ja dopiero na samym koncu,
+        # po potwierdzeniu, ze nowa wersja chodzi.
+        /bin/rm -rf "$katalog" "$paczka"
 
         # macOS trzyma w pamieci opis STAREJ kopii programu (sciezka, podpis,
         # identyfikator). Zaraz po podmianie `open` potrafi trafic w ten nieaktualny
@@ -337,11 +326,53 @@ final class Updater {
           sleep 2
         done
 
-        if [ "$uruchomione" != "1" ]; then
-          echo "nie udalo sie uruchomic programu po podmianie"
-          /usr/bin/osascript -e 'display notification "Nowa wersja jest gotowa, ale nie wystartowała sama. Uruchom Klyo Switcher z katalogu Programy." with title "Klyo Switcher"' 2>/dev/null || true
+        if [ "$uruchomione" = "1" ]; then
+          # Nowa wersja chodzi - dopiero TERAZ poprzednia jest zbedna.
+          /bin/rm -rf "$ustepujaca"
+
+          # Kopie z numerem w nazwie („Klyo Switcher 2.app") biora sie stad, ze nowy
+          # plik trafil OBOK starego. Kazda taka kopia to dla systemu osobny program
+          # z osobna zgoda - a uruchamia sie zwykle nie ta, ktorej zgode wlaczyl
+          # czlowiek. Sprzatamy je PO starcie, zeby zaden blad tutaj nie mogl
+          # przeszkodzic w uruchomieniu programu.
+          nazwa_bazowa=$(/usr/bin/basename "$cel" .app)
+          for katalog_kopii in /Applications "$HOME/Applications" "$HOME/Downloads" "$HOME/Desktop"; do
+            [ -d "$katalog_kopii" ] || continue
+            for kopia in "$katalog_kopii/$nazwa_bazowa "*.app; do
+              [ -e "$kopia" ] || continue
+              [ "$kopia" = "$cel" ] && continue
+              reszta=${kopia##*/}
+              reszta=${reszta%.app}
+              reszta=${reszta#"$nazwa_bazowa "}
+              case "$reszta" in
+                ''|*[!0-9]*) continue ;;   # tylko czysty numer, nic innego nie ruszamy
+              esac
+              echo "usuwam zbedna kopie: $kopia"
+              /bin/rm -rf "$kopia" || true
+            done
+          done
+          echo "podmieniono na wersje \(wersja)"
+          exit 0
         fi
-        echo "podmieniono na wersje \(wersja)"
+
+        # Nowa wersja nie wstala. Nie zostawiamy czlowieka z niczym: wraca ta,
+        # ktora dzialala jeszcze minute temu, i to ona ma sie uruchomic.
+        echo "nowa wersja nie wstala - przywracam poprzednia"
+        if [ -e "$ustepujaca" ]; then
+          /bin/rm -rf "$cel"
+          /bin/mv "$ustepujaca" "$cel" || true
+          [ -x "$rejestr" ] && "$rejestr" -f "$cel" 2>/dev/null || true
+          for proba in 1 2 3; do
+            /usr/bin/open -n "$cel" 2>/dev/null || true
+            sleep 2
+            /usr/bin/pgrep -x KlyoSwitcher > /dev/null 2>&1 && { uruchomione=1; break; }
+          done
+        fi
+        if [ "$uruchomione" = "1" ]; then
+          /usr/bin/osascript -e 'display notification "Aktualizacja się nie powiodła — pracujesz na poprzedniej wersji. Nic nie zginęło." with title "Klyo Switcher"' 2>/dev/null || true
+        else
+          /usr/bin/osascript -e 'display notification "Program nie wystartował po aktualizacji. Otwórz Klyo Switcher z katalogu Programy." with title "Klyo Switcher"' 2>/dev/null || true
+        fi
         """
         let proces = Process()
         proces.executableURL = URL(fileURLWithPath: "/bin/bash")
