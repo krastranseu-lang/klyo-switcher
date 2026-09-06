@@ -12,6 +12,11 @@ enum HUDLayout {
     static let sectionGap: CGFloat = 14
     static let footerHeight: CGFloat = 40
     static let maxColumns: Int = 7
+    /// Duzy podglad okna pod kursorem - na tyle duzy, zeby dalo sie przeczytac
+    /// tresc strony, i na tyle maly, zeby zmiescil sie w panelu przy trzech
+    /// kolumnach kart (3 × 186 + 2 × 12 = 582 px).
+    static let duzyPodgladSzerokosc: CGFloat = 640
+    static let duzyPodgladWysokosc: CGFloat = 420
 
     static func columns(for count: Int, screenWidth: CGFloat) -> Int {
         guard count > 0 else { return 1 }
@@ -53,7 +58,23 @@ final class SwitcherModel: ObservableObject {
     private(set) var pierwszeKarty: Set<String> = []
     @Published var selection: Int = 0
     @Published var columns: Int = 1
-    @Published var hoveredID: String?
+    @Published var hoveredID: String? {
+        didSet {
+            guard oldValue != hoveredID else { return }
+            // Duzy podglad nalezy do POPRZEDNIEJ karty - gasimy go od razu, zeby
+            // przez chwile nie pokazywac tresci innego okna niz to pod kursorem.
+            if duzyPodglad?.id != hoveredID { duzyPodglad = nil }
+            onZmianaKursora?(hoveredID)
+        }
+    }
+    /// Ostry zrzut okna pod kursorem, robiony na zadanie - patrz `onZmianaKursora`.
+    ///
+    /// Miniatura na karcie ma 170 px szerokosci: widac po niej UKLAD okna, ale nie
+    /// tresc. Przy kilku podobnych stronach otwartych w przegladarce to za malo,
+    /// zeby rozpoznac, ktora jest ktora - a po to czlowiek otwiera przelacznik.
+    @Published var duzyPodglad: (id: String, obraz: NSImage)?
+    /// Wolane, gdy kursor wchodzi na inna karte (albo z niej schodzi).
+    var onZmianaKursora: ((String?) -> Void)?
     /// Mysz slnie NIE wybiera - to byla prosba uzytkownika po realnej pomylce:
     /// kursor stojacy na srodku ekranu przestawial wybor tuz przed puszczeniem
     /// modyfikatora i program przelaczal na zle okno. Zostaje samo podswietlenie
@@ -211,6 +232,10 @@ struct SwitcherView: View {
             footer
         }
         .padding(HUDLayout.padding)
+        // Duzy podglad rysuje sie NAD siatka, w srodku panelu. Nie powiekszamy
+        // samej karty ponad miare, bo karta przy krawedzi wyszlaby poza panel
+        // i system by ja przycial - a podglad ma byc CZYTELNY, nie polowiczny.
+        .overlay(duzyPodglad)
         .background(
             ZStack {
                 VisualEffectBackground()
@@ -239,6 +264,66 @@ struct SwitcherView: View {
         // ramke, albo szara mgle - nigdy obu naraz.
         .shadow(color: Color.black.opacity(0.30), radius: 10, y: 4)
         .shadow(color: Color.black.opacity(0.26), radius: 38, y: 16)
+    }
+
+    // MARK: - Duzy podglad okna pod kursorem
+
+    /// Panel z ostrym zrzutem okna, ktore jest pod kursorem.
+    ///
+    /// Powod istnienia jednym zdaniem wlasciciela projektu: „jak masz kilka
+    /// podobnych stron otwartych, musisz przeczytac jakakolwiek tresc, zeby
+    /// wiedziec, ktory Chrome otworzyc". Miniatura na karcie ma 170 px - widac
+    /// uklad, nie tresc. Ten podglad ma 640 px szerokosci i zrzut robiony
+    /// specjalnie dla niego, wiec tekst w oknie da sie przeczytac.
+    @ViewBuilder
+    private var duzyPodglad: some View {
+        if let podglad = model.duzyPodglad, let pozycja = model.items.first(where: { $0.id == podglad.id }) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(nsImage: podglad.obraz)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: HUDLayout.duzyPodgladSzerokosc,
+                           maxHeight: HUDLayout.duzyPodgladWysokosc)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+                HStack(spacing: 8) {
+                    if let ikona = pozycja.icon {
+                        Image(nsImage: ikona).resizable().frame(width: 20, height: 20)
+                    }
+                    Text(pozycja.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let plakietka = pozycja.place.label {
+                        Text(plakietka)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.9)))
+                            .foregroundStyle(Color.white)
+                    }
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.black.opacity(0.55))
+                    .background(
+                        VisualEffectBackground()
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Barwy.obramowanie, lineWidth: 1.4)
+            )
+            .shadow(color: Color.black.opacity(0.45), radius: 30, y: 12)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .animation(.easeOut(duration: 0.12), value: podglad.id)
+        }
     }
 
     // MARK: - Stopka
@@ -352,19 +437,29 @@ struct SwitcherView: View {
         // a nie okno, wiec przy pietnastu oknach Chrome pietnascie kart dostawalo
         // bursztynowa ramke i cala lista stawala sie zolta. Znak, ktory dostaje
         // polowa listy, przestaje byc znakiem.
+        // Ulubione maja byc widoczne KATEM OKA, bo po to sa: zeby dalo sie w nie
+        // trafic mysza bez czytania listy. Wczesniejsza wersja przygaszala je tak
+        // mocno (0,34), ze przestaly cokolwiek mowic - ale wtedy znak dostawalo
+        // kilkanascie kart naraz. Teraz znak ma tylko PIERWSZE okno programu,
+        // wiec moze byc wyrazny bez zamieniania listy w choinke.
         let barwaObramowania: Color = isSelected
             ? Color.accentColor.opacity(0.95)
-            : (barwaUlubionego ?? Color.white).opacity(barwaUlubionego != nil ? 0.34 : 0.055)
-        let grubosc: CGFloat = isSelected ? 1.8 : (barwaUlubionego != nil ? 1.1 : 1)
-        // Poswiate zostawiamy wylacznie pierwszemu miejscu - jedno, mocne wyroznienie
-        // zamiast trzech slabych.
-        let poswiataBarwa: Color = ulubione == 0 ? (barwaUlubionego ?? .clear) : .clear
-        let poswiataOpacja: Double = ulubione == 0 ? 0.30 : 0
-        let poswiataPromien: CGFloat = ulubione == 0 ? 7 : 0
+            : (barwaUlubionego ?? Color.white).opacity(barwaUlubionego != nil ? 0.95 : 0.055)
+        let grubosc: CGFloat = isSelected ? 1.8 : (barwaUlubionego != nil ? 2.2 : 1)
+        let poswiataBarwa: Color = barwaUlubionego ?? .clear
+        let poswiataOpacja: Double = ulubione == 0 ? 0.55 : (barwaUlubionego != nil ? 0.35 : 0)
+        let poswiataPromien: CGFloat = ulubione == 0 ? 12 : (barwaUlubionego != nil ? 8 : 0)
         // Tlo karty jako gradient, nie plaski kolor: plaska plama w kolorze akcentu
         // wyglada jak zaznaczenie w tabelce, a nie jak karta, ktora stoi wyzej.
-        let gornaBarwa: Color = isSelected ? Color.accentColor.opacity(0.38) : Color.primary.opacity(0.07)
-        let dolnaBarwa: Color = isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.03)
+        // Tlo karty ulubionego jest zabarwione jego kolorem - to widac wczesniej
+        // niz obramowanie, bo zajmuje cala karte, a nie jej krawedz.
+        let barwaTla: Color = barwaUlubionego ?? Color.primary
+        let gornaBarwa: Color = isSelected
+            ? Color.accentColor.opacity(0.38)
+            : barwaTla.opacity(barwaUlubionego != nil ? 0.22 : 0.07)
+        let dolnaBarwa: Color = isSelected
+            ? Color.accentColor.opacity(0.16)
+            : barwaTla.opacity(barwaUlubionego != nil ? 0.07 : 0.03)
         let tloKarty = LinearGradient(colors: [gornaBarwa, dolnaBarwa], startPoint: .top, endPoint: .bottom)
         // Niewybrane karty odrobine przygaszone - wzrok idzie tam, gdzie trzeba,
         // a lista nie zamienia sie w rownomierna sciane kwadratow.
@@ -433,11 +528,10 @@ struct SwitcherView: View {
         // czarnego cienia karty wybranej. Świeci zawsze, także gdy karta jest
         // akurat zaznaczona, żeby zaznaczenie ulubionego nie „gubiło" koloru.
         .shadow(color: poswiataBarwa.opacity(poswiataOpacja), radius: poswiataPromien)
-        // Karta pod kursorem rosnie na tyle, zeby dalo sie PRZECZYTAC, co w oknie
-        // jest - miniatura 170 px szerokosci pokazuje uklad, ale nie tresc.
-        // Powiekszona wychodzi poza swoje miejsce w siatce, wiec musi rysowac sie
-        // NAD sasiadami (`zIndex`), inaczej wjezdzalaby pod nie.
-        .scaleEffect(podKursorem ? 1.34 : (isSelected ? 1.035 : 1.0))
+        // Karta pod kursorem podnosi sie lekko - to sygnal „tu jestes". Czytelnosc
+        // zapewnia DUZY PODGLAD na srodku panelu, wiec karty nie trzeba juz
+        // rozdymac; przy krawedzi panelu i tak zostalaby przycieta.
+        .scaleEffect(podKursorem ? 1.12 : (isSelected ? 1.035 : 1.0))
         .shadow(color: Color.black.opacity(podKursorem ? 0.34 : 0), radius: podKursorem ? 22 : 0, y: podKursorem ? 10 : 0)
         .zIndex(podKursorem ? 2 : (isSelected ? 1 : 0))
         .animation(.spring(response: 0.24, dampingFraction: 0.8), value: podKursorem)

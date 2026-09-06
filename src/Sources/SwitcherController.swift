@@ -41,6 +41,8 @@ final class SwitcherController {
     private var sessionActive = false
     private var generation = 0
     private var thumbnailToken: CancelToken?
+    /// Znacznik zamowienia duzego podgladu - kazde nowe uniewaznia poprzednie.
+    private var podgladToken: CancelToken?
     private var watchdog: Timer?
     private var idleCleanup: Timer?
 
@@ -98,6 +100,13 @@ final class SwitcherController {
             self?.browsers.attachPendingObservers()
             self?.browsers.refresh(after: 0.3)
             self?.usage.attachPendingObservers()
+        }
+
+        // Kursor na karcie zamawia OSTRY zrzut tego jednego okna. Robimy go dopiero
+        // na zadanie, bo w takiej rozdzielczosci wszystkie karty naraz zajelyby
+        // dziesiatki megabajtow - a czyta sie i tak jedno okno naraz.
+        model.onZmianaKursora = { [weak self] identyfikator in
+            self?.zamowDuzyPodglad(identyfikator)
         }
 
         // Kolejnosc kart zmienia sie wylacznie po POTWIERDZONYM przelaczeniu -
@@ -348,6 +357,9 @@ final class SwitcherController {
         watchdog = nil
         thumbnailToken?.cancel()
         thumbnailToken = nil
+        podgladToken?.cancel()
+        podgladToken = nil
+        model.duzyPodglad = nil
         panel?.orderOut(nil)
         scheduleIdleCleanup()
     }
@@ -362,6 +374,7 @@ final class SwitcherController {
             self.idleCleanup = nil
             self.model.items = []
             self.model.selection = 0
+            self.model.duzyPodglad = nil
             self.hostingView = nil
             self.panel?.contentView = nil
             self.panel?.close()
@@ -436,6 +449,40 @@ final class SwitcherController {
         panel = created
         hostingView = hosting
         return created
+    }
+
+    // MARK: - Duzy podglad pod kursorem
+
+    /// Zamawia ostry zrzut okna, na ktorym stoi kursor.
+    ///
+    /// Krotka zwloka przed zrzutem jest po to, zeby przejechanie mysza przez
+    /// polowe listy nie zamawialo dziesieciu zrzutow po drodze - liczy sie karta,
+    /// na ktorej kursor ZOSTAL.
+    private func zamowDuzyPodglad(_ identyfikator: String?) {
+        podgladToken?.cancel()
+        guard let identyfikator,
+              Settings.showThumbnails, Permissions.screenRecordingGranted,
+              let pozycja = model.items.first(where: { $0.id == identyfikator }),
+              pozycja.windowID != 0 else {
+            model.duzyPodglad = nil
+            return
+        }
+        let token = CancelToken()
+        podgladToken = token
+        let okno = pozycja.windowID
+        let pokolenie = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard let self, !token.isCancelled, self.sessionActive, self.generation == pokolenie else { return }
+            self.thumbnailQueue.async { [weak self] in
+                guard !token.isCancelled,
+                      let obraz = WindowThumbnails.capture(windowID: okno, maxWidth: 1600) else { return }
+                DispatchQueue.main.async {
+                    guard let self, !token.isCancelled, self.sessionActive,
+                          self.generation == pokolenie, self.model.hoveredID == identyfikator else { return }
+                    self.model.duzyPodglad = (id: identyfikator, obraz: obraz)
+                }
+            }
+        }
     }
 
     // MARK: - Miniatury
