@@ -1,0 +1,146 @@
+name: Sprawdź aktualizację na prawdziwym macOS
+
+# Aktualizacja, która nie została uruchomiona na macOS, jest tylko zamiarem.
+# Ten przebieg bierze DWIE prawdziwe, podpisane wersje z wydań, instaluje starszą
+# i każe jej zaktualizować się do nowszej — tak, jak zrobi to program u człowieka.
+# Sprawdza też, co się stanie, gdy paczka jest uszkodzona: wtedy MUSI zostać
+# działający program w starej wersji, a nie pusty katalog.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stara:
+        description: "Wersja, od której zaczynamy (np. 1.10.0)"
+        required: true
+        default: "1.10.0"
+      nowa:
+        description: "Wersja, do której aktualizujemy (np. 1.11.0)"
+        required: true
+        default: "1.11.0"
+  push:
+    paths: ["src/aktualizuj.sh", ".github/workflows/sprawdz-aktualizacje.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  sprawdz:
+    runs-on: macos-15
+    env:
+      STARA: ${{ github.event.inputs.stara || '1.10.0' }}
+      NOWA: ${{ github.event.inputs.nowa || '1.11.0' }}
+      WYDANIA: https://github.com/krastranseu-lang/klyo-switcher/releases/download
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pobierz obie wersje
+        run: |
+          set -euo pipefail
+          mkdir -p proba
+          curl -fsSL -o "proba/stara.zip" "${WYDANIA}/v${STARA}/Klyo-Switcher-${STARA}-uniwersalny.zip"
+          curl -fsSL -o "proba/nowa.zip"  "${WYDANIA}/v${NOWA}/Klyo-Switcher-${NOWA}-uniwersalny.zip"
+          ls -la proba/
+
+      - name: Zainstaluj starszą wersję tak, jak robi to człowiek
+        run: |
+          set -euo pipefail
+          ditto -x -k proba/stara.zip proba/rozpakowana
+          cp -R "proba/rozpakowana/Klyo Switcher.app" "/Applications/Klyo Switcher.app"
+          w=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "/Applications/Klyo Switcher.app/Contents/Info.plist")
+          echo "zainstalowana wersja: $w"
+          [ "$w" = "${STARA}" ] || { echo "OCZEKIWANO ${STARA}"; exit 1; }
+
+      - name: Zrób kopię z numerem — tę, która psuła zgody
+        run: |
+          set -euo pipefail
+          # Dokładnie to, co widział Ilya: „Klyo Switcher 5.app" obok właściwej.
+          cp -R "/Applications/Klyo Switcher.app" "/Applications/Klyo Switcher 5.app"
+          ls -d /Applications/Klyo*.app
+
+      - name: AKTUALIZACJA — to samo, co zrobi program u człowieka
+        env:
+          KLYO_BEZ_STARTU: "1"   # maszyna budująca nie ma pulpitu
+        run: |
+          set -euo pipefail
+          suma=$(shasum -a 256 proba/nowa.zip | awk '{print $1}')
+          chmod +x src/aktualizuj.sh
+          src/aktualizuj.sh "$PWD/proba/nowa.zip" "/Applications/Klyo Switcher.app" "$suma"
+
+      - name: Sprawdź, co naprawdę stoi na dysku
+        run: |
+          set -euo pipefail
+          bledy=0
+
+          echo "— czy program w ogóle istnieje —"
+          if [ -d "/Applications/Klyo Switcher.app" ]; then echo "  ✓ jest"; else echo "  ✗ NIE MA PROGRAMU"; bledy=1; fi
+
+          echo "— czy ma nową wersję —"
+          w=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "/Applications/Klyo Switcher.app/Contents/Info.plist" 2>/dev/null || echo "?")
+          if [ "$w" = "${NOWA}" ]; then echo "  ✓ ${w}"; else echo "  ✗ jest ${w}, oczekiwano ${NOWA}"; bledy=1; fi
+
+          echo "— czy podpis przetrwał podmianę —"
+          if codesign --verify --deep --strict "/Applications/Klyo Switcher.app" 2>/dev/null; then
+            echo "  ✓ podpis w porządku"
+          else
+            echo "  ✗ PODPIS USZKODZONY — macOS odmówi uruchomienia"; bledy=1
+          fi
+
+          echo "— czy potwierdzenie Apple jest na miejscu —"
+          if spctl --assess --type execute "/Applications/Klyo Switcher.app" 2>&1 | grep -q accepted; then
+            echo "  ✓ system akceptuje program"
+          else
+            echo "  ✗ system NIE akceptuje programu"; bledy=1
+          fi
+
+          echo "— czy kopia z numerem zniknęła —"
+          if [ -e "/Applications/Klyo Switcher 5.app" ]; then
+            echo "  ✗ „Klyo Switcher 5.app" NADAL ISTNIEJE — zgody znów się rozjadą"; bledy=1
+          else
+            echo "  ✓ sprzątnięta"
+          fi
+
+          echo "— czy nie zostały pliki robocze —"
+          if ls -d /Applications/.Klyo* >/dev/null 2>&1; then
+            echo "  ✗ zostały śmieci:"; ls -d /Applications/.Klyo*; bledy=1
+          else
+            echo "  ✓ czysto"
+          fi
+
+          [ "$bledy" = "0" ] || { echo; echo "AKTUALIZACJA NIE PRZESZŁA"; exit 1; }
+          echo; echo "AKTUALIZACJA DZIAŁA"
+
+      - name: Próba negatywna — uszkodzona paczka nie może zabrać programu
+        env:
+          KLYO_BEZ_STARTU: "1"
+        run: |
+          set -uo pipefail
+          echo "psuję paczkę i próbuję zaktualizować"
+          printf 'to nie jest program' > proba/zepsuta.zip
+          suma=$(shasum -a 256 proba/zepsuta.zip | awk '{print $1}')
+          chmod +x src/aktualizuj.sh
+          src/aktualizuj.sh "$PWD/proba/zepsuta.zip" "/Applications/Klyo Switcher.app" "$suma" || true
+
+          if [ ! -d "/Applications/Klyo Switcher.app" ]; then
+            echo "  ✗ NAJGORSZY WYNIK: uszkodzona paczka zabrała program"; exit 1
+          fi
+          w=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "/Applications/Klyo Switcher.app/Contents/Info.plist" 2>/dev/null || echo "?")
+          if [ "$w" != "${NOWA}" ]; then
+            echo "  ✗ program uszkodzony (wersja: $w)"; exit 1
+          fi
+          if ! codesign --verify --deep --strict "/Applications/Klyo Switcher.app" 2>/dev/null; then
+            echo "  ✗ podpis programu ucierpiał"; exit 1
+          fi
+          echo "  ✓ program nietknięty — uszkodzona paczka odrzucona bez szkody"
+
+      - name: Próba negatywna — podmieniona suma kontrolna
+        env:
+          KLYO_BEZ_STARTU: "1"
+        run: |
+          set -uo pipefail
+          chmod +x src/aktualizuj.sh
+          wynik=$(src/aktualizuj.sh "$PWD/proba/nowa.zip" "/Applications/Klyo Switcher.app" "0000000000000000000000000000000000000000000000000000000000000000" 2>&1 || true)
+          echo "$wynik" | grep -q "suma kontrolna się nie zgadza" \
+            && echo "  ✓ odrzucił paczkę o niezgodnej sumie" \
+            || { echo "  ✗ PRZEPUŚCIŁ paczkę o złej sumie"; exit 1; }
+          [ -d "/Applications/Klyo Switcher.app" ] || { echo "  ✗ program zniknął"; exit 1; }
+          echo "  ✓ program nietknięty"
