@@ -46,6 +46,11 @@ jobs:
           lipo -info "build/Klyo Switcher.app/Contents/MacOS/KlyoSwitcher"
           cp src/Sources/Info.plist "build/Klyo Switcher.app/Contents/Info.plist"
           printf 'APPL????' > "build/Klyo Switcher.app/Contents/PkgInfo"
+          # Skrypt aktualizacji jedzie RAZEM z programem. Ten sam plik, który
+          # przechodzi sprawdzian na macOS, wykonuje potem podmianę u człowieka —
+          # nie ma drugiej kopii logiki, która mogłaby się rozjechać.
+          cp src/aktualizuj.sh "build/Klyo Switcher.app/Contents/Resources/aktualizuj.sh"
+          chmod +x "build/Klyo Switcher.app/Contents/Resources/aktualizuj.sh"
 
       - name: Narysuj ikonę
         continue-on-error: true
