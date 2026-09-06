@@ -38,16 +38,32 @@ enum PrzelacznikJS {
         guard let pozycja = znajdz(pid: pid) else { return false }
         let znacznik = (axCopy(pozycja, "AXMenuItemMarkChar") as? String) ?? ""
         if !znacznik.isEmpty { return true }
+        // Pasek menu nalezy do aplikacji AKTYWNEJ - w nieaktywnej nie da sie w nim
+        // nic nacisnac. Zmierzone: przy nieaktywnym Chrome konczylo sie na
+        // „wylaczony -> nadal wylaczony". Wysuwamy wiec przegladarke na wierzch
+        // na te dwa klikniecia; to jest jednorazowe i na wyrazne zyczenie czlowieka.
+        let poprzedni = NSWorkspace.shared.frontmostApplication
+        NSRunningApplication(processIdentifier: pid)?.activate()
+        Thread.sleep(forTimeInterval: 0.35)
+        defer {
+            if let poprzedni, poprzedni.processIdentifier != pid { poprzedni.activate() }
+        }
+
         // Menu trzeba OTWORZYC, zeby dalo sie w nim kliknac. Zmierzone: samo
-        // nacisniecie ukrytej pozycji konczy sie niczym - „wylaczony ->  nadal
-        // wylaczony". Otwieramy wiec cala droge: pozycja paska, potem podmenu.
+        // nacisniecie ukrytej pozycji konczy sie niczym. Otwieramy wiec cala
+        // droge: pozycja paska, potem podmenu.
         for rodzic in droga(do: pozycja).reversed() {
             AXUIElementPerformAction(rodzic, kAXPressAction as CFString)
             Thread.sleep(forTimeInterval: 0.18)
         }
         AXUIElementPerformAction(pozycja, kAXPressAction as CFString)
-        Thread.sleep(forTimeInterval: 0.35)
-        let wlaczony = stan(pid: pid) == .wlaczony
+        // Chrome przerysowuje menu po chwili - pytanie o stan od razu potrafi
+        // zastac jeszcze stara wartosc.
+        var wlaczony = false
+        for _ in 0..<6 {
+            Thread.sleep(forTimeInterval: 0.15)
+            if stan(pid: pid) == .wlaczony { wlaczony = true; break }
+        }
         if !wlaczony { zamknijMenu() }
         return wlaczony
     }
