@@ -251,7 +251,7 @@ struct WidokUprawnien: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if !wlasciwa {
-                Text("To nie jest miejsce, w którym program powinien stać. Zgody z Ustawień należą do kopii w katalogu Programy, nie do tej. Przenieś program do Programów i uruchom go stamtąd.")
+                Text("To nie jest miejsce, w którym program powinien stać. Zgody z Ustawień należą do kopii w katalogu Aplikacje, nie do tej. Przenieś program do Aplikacji i uruchom go stamtąd.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -333,7 +333,7 @@ struct WidokUprawnien: View {
                 }
                 .buttonStyle(.bordered)
             }
-            Text("Gdy wolisz ręcznie: Ustawienia → Prywatność i ochrona → Dostępność, zaznacz „\(AppInfo.name)”, kliknij minus, potem plus i wskaż program w katalogu Programy.")
+            Text("Gdy wolisz ręcznie: Ustawienia → Prywatność i ochrona → Dostępność, zaznacz „\(AppInfo.name)”, kliknij minus, potem plus i wskaż program w katalogu Aplikacje.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
