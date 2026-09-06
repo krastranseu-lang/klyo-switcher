@@ -540,6 +540,10 @@ struct SwitcherView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2.5)
                     .background(Capsule().fill(Color.accentColor.opacity(0.92)))
+                    // Plakietka nie moze sie zwezac razem z kadrem - przy waskiej
+                    // karcie „Biurko 3" traci numer i zostaje samo „Biurko",
+                    // czyli napis, ktory nie mowi juz nic.
+                    .fixedSize()
                     .padding(4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
